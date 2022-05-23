@@ -1,0 +1,529 @@
+#!/usr/bin/env python 
+"""this defines where interpreter is located, used for portability across different operating systems"""
+
+"""
+Measures LF for each galaxy cluster, combines each LF to make a composite LF.
+
+"""
+
+import os
+import sys
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+import astropy.table as atpy
+import astropy.io.fits as pyfits
+import astropy.stats as apyStats
+from astLib import *
+from zCluster import retrievers
+from zCluster import PhotoRedshiftEngine
+from zCluster import clusters
+from zCluster import catalogs
+from astropy.cosmology import FlatLambdaCDM
+from collections import Counter
+import urllib
+import time
+import pyccl as ccl
+from scipy import interpolate
+
+
+
+
+#M200 to R200 calc. (taken from NEMO)  
+        
+#------------------------------------------------------------------------------------------------------------
+Om0=0.3
+Ob0=0.05
+H0=70
+sigma8=0.8
+ns=0.95
+transferFunction="boltzmann_camb"
+
+fiducialCosmoModel=ccl.Cosmology(Omega_c=Om0-Ob0, Omega_b=Ob0, h=0.01*H0, sigma8=sigma8, n_s=ns,
+                                transfer_function=transferFunction)
+
+M200mDef=ccl.halos.MassDef(200, "matter", c_m_relation = 'Bhattacharya13')
+M200cDef=ccl.halos.MassDef(200, "critical", c_m_relation = 'Bhattacharya13')
+M500cDef=ccl.halos.MassDef(500, "critical")
+
+#------------------------------------------------------------------------------------------------------------
+def calcRDeltaMpc(z, MDelta, cosmoModel, delta = 500, wrt = 'critical'):
+    """Calculate RDelta (e.g., R500c, R200m etc.) in Mpc, for a halo with the given mass and redshift.
+    Args:
+        z (float): Redshift.
+        MDelta (float): Halo mass in units of solar masses, using the definition set by `delta` and `wrt`.
+        cosmoModel (:obj:`pyccl.Cosmology`): Cosmology object.
+        delta (float, optional): Overdensity (e.g., typically 500 or 200).
+        wrt (str, optional): Use 'critical' or 'mean' to set the definition of density with respect to the
+            critical density or mean density at the given redshift.
+    Returns:
+        RDelta (in Mpc)
+    """
+
+    if type(MDelta) == str:
+        raise Exception("MDelta is a string - use, e.g., 1.0e+14 (not 1e14 or 1e+14)")
+
+    Ez=ccl.h_over_h0(cosmoModel, 1/(1+z))
+    if wrt == 'critical':
+        wrtDensity=ccl.physical_constants.RHO_CRITICAL*(Ez*cosmoModel['h'])**2
+    elif wrt == 'mean':
+        wrtDensity=ccl.omega_x(cosmoModel, 1/(1+z), 'matter')*ccl.physical_constants.RHO_CRITICAL*(Ez*cosmoModel['h'])**2
+    else:
+        raise Exception("wrt should be either 'critical' or 'mean'")
+    RDeltaMpc=np.power((3*MDelta)/(4*np.pi*delta*wrtDensity), 1.0/3.0)
+
+    return RDeltaMpc
+
+#------------------------------------------------------------------------------------------------------------
+
+#K-correction code from Hilton et al. (2013) - Spitzer LFs k-correction
+#-------------------------------------------------------------------------------------------------------------
+def applyKCorrection(magArray, redshift, channel, bandToCorrectTo, zf = 3.0, zToCorrectTo = 0.01, magType = "AB", model = "BC03"):
+    """This is my own K-correction code, gives consistent results with De Propris but note I'm assuming:
+
+    mag_rest = mag_obs + KCorr
+
+    which is opposite convention to De Propris, and might be non-standard.
+
+    K-correcting to the same K-filter as De Propris assumes (BC03 K Johnson filter)
+
+    Assuming the same model as De Propris et al. 2007 (see above)
+
+    NOTE: Updated Feb 2012, added bandToCorrectTo, which will break old code. But will stop us blindly converting
+    to K-band when we mean to K-correct to CH1 at a different z (as in LFsRedux).
+
+    """
+
+    # Look for previously saved results, if not generate K-correction file
+    outDir="ancillaryData/KCorrections"
+    outFileName=outDir+os.path.sep+"KCorr_%sTo%s_zf%.1f_zToCorrectTo%.2f_%s_%s.npz" % (channel, bandToCorrectTo, zf, zToCorrectTo, magType, model)   #write to cache directory
+    if os.path.exists(outFileName) == False:
+
+        print("... calculating K-correction ...")
+        if model == 'BC03':
+            m=astSED.BC03Model("ancillaryData/BC03Models/tau0p1Gyr_m62.20")
+        elif model == 'M05':
+            m=astSED.M05Model(os.environ['HOME']+os.path.sep+"Astro_Software/Maraston_Models/CSPs/Salpeter/csp_e0.10_z02_salp.sed_agb")
+
+        if channel == "CH1":
+            IRACPassband=astSED.Passband("/ancillaryData/filters/080924ch1trans_full.txt", inputUnits = 'microns')
+        elif channel == "CH2":
+            IRACPassband=astSED.Passband("ancillaryData/filters/080924ch2trans_full.txt", inputUnits = 'microns')
+        elif channel == "K":
+            #IRACPassband=astSED.Passband("ancillaryData/filters/K_Johnson.res")
+            IRACPassband=astSED.Passband("ancillaryData/filters/K_2MASS.res")
+        elif channel == 'r':
+            IRACPassband=astSED.Passband("ancillaryData/filters/decam.r.am1p4.dat.txt")
+        elif bandToCorrectTo == "R":
+            IRACPassband=astSED.Passband("ancillaryData/filters/filt_bessel_R.dat", inputUnits = 'nanometres')
+
+        if bandToCorrectTo == "CH1":
+            targetBand=astSED.Passband("ancillaryData/filters/080924ch1trans_full.txt", inputUnits = 'microns')
+        elif bandToCorrectTo == "CH2":
+            targetBand=astSED.Passband("ancillaryData/filters/080924ch2trans_full.txt", inputUnits = 'microns')
+        elif bandToCorrectTo == "K":
+            targetBand=astSED.Passband("ancillaryData/filters/K_2MASS.res")
+        elif bandToCorrectTo == "R":
+            targetBand=astSED.Passband("ancillaryData/filters/filt_bessel_R.dat", inputUnits = 'nanometres')
+        elif bandToCorrectTo == "r":
+            targetBand=astSED.Passband("ancillaryData/filters/decam.r.am1p4.dat.txt")
+        else:
+            raise Exception("didn't understand bandToCorrectTo")
+
+        zRange=np.arange(0.0, zf, 0.025)
+        KCorrArray=[]
+        for z in zRange:
+            s0=m.getSED(astCalc.tl(zf)-astCalc.tl(z), z = zToCorrectTo)
+            s1=m.getSED(astCalc.tl(zf)-astCalc.tl(z), z = z)
+            KCorrArray.append(s0.calcMag(targetBand, addDistanceModulus = False, magType = magType)- \
+                              s1.calcMag(IRACPassband, addDistanceModulus = False, magType = magType))
+        KCorrArray=np.array(KCorrArray)
+
+        np.savez(outFileName, zRange, KCorrArray)
+    else:
+        stuff=np.load(outFileName)
+        zRange=stuff['arr_0']
+        KCorrArray=stuff['arr_1']
+
+    tck=interpolate.splrep(zRange, KCorrArray)
+    KCorr=interpolate.splev(redshift, tck)
+
+    magArray=magArray+KCorr # yes, I'm opposite way round to De Propris
+
+    return magArray
+"""Could write function to return interpolater and include k-correcting in code """
+#------------------------------------------------------------------------------------------------------------
+
+
+
+start=time.time() 
+if __name__ == '__main__':
+    
+    parser = argparse.ArgumentParser("zLF")
+    parser.add_argument("catalogFileName", help="""A .fits table or a .csv file with at least the columns 
+                        'name', 'RADeg', 'decDeg'.""")
+    parser.add_argument("database", help="""The photometric database to use. Options are 'SDSSDR12', 'S82' 
+                        (for SDSS DR7 Stripe 82 co-add); 'CFHTLenS'; 'DESDR1' [experimental], 
+                        'DESY3' [experimental; requires access to proprietary DES data]; 'PS1' [experimental]; 
+                        'DECaLS' (DR8); or the path to a .fits table with columns in the 
+                        appropriate format ('ID', 'RADeg', 'decDeg', and magnitude column names in the form 
+                        'u_MAG_AUTO', 'u_MAGERR_AUTO' etc.).""")
+    parser.add_argument("-o", "--output-directory", dest="outDir", help="""Label to use for the preferred output
+                        directory.""", default = "zLFOutput")
+    parser.add_argument("-w", "--weights-type", dest="weightsType", help="""Radial weighting type. Options
+                        are 'NFW', 'flat', or 'radial' (default: NFW).""", default = 'NFW')
+    parser.add_argument("-R", "--max-radius-Mpc", dest="maxRMpc", help="""Maximum radius in Mpc within 
+                        which to calculate delta statistic for each cluster (default: 0.5).""", 
+                        default = 0.5)
+    parser.add_argument("-m", "--mask", dest="mask", help="""Path to mask image (FITS format with WCS)
+                        that defines valid survey area.""", default = None)
+    parser.add_argument("-a", "--algorithm", dest="algorithm", help="""Algorithm to use for the maximum likelihood
+                        redshift. Options are 'max' or 'odds' (default: odds).""", 
+                        default = 'odds')
+    parser.add_argument("-i", "--max-iter", dest="maxIter", help="""Maximum number of iterations for finding
+                        the cluster redshift and optical position based on projected density map (default: 1).""", 
+                        default = 1, type = int)
+    parser.add_argument("-c", "--cachedir", dest="cacheDir", default = None, help="""Cache directory location
+                        (default: $HOME/.zCluster/cache). Downloaded photometric catalogs will be stored 
+                        here.""")
+    parser.add_argument("-M", "--mpi", dest="MPIEnabled", action="store_true", help="""Enable MPI. If you
+                        want to use this, run zLF using something like: mpirun --np 4 zLF ...""", 
+                        default = False)
+    parser.add_argument("-e", "--max-mag-error", dest="maxMagError", help="""Maximum acceptable 
+                        photometric error (in magnitudes; default: 0.25).""", default = 0.25)
+    parser.add_argument("-E", "--photometric-zero-point-error", dest="ZPError", type = float, 
+                        help="""Global photometric zero point uncertainty in magnitudes, applied to all bands 
+                        (default: 0). Added in quadrature to the photometric uncertainties in the catalog.""", 
+                        default = 0.0)
+    parser.add_argument("-f", "--fit-for-zero-point-offsets", dest="fitZPOffsets", 
+                        help="""If the input catalog contains a z_spec column, use those galaxies to fit
+                        for magnitude zero point offsets. These will then be applied when estimating galaxy
+                        photometric redshifts.""", 
+                        default = False, action = "store_true")
+    parser.add_argument("-z", "--z-prior-min", dest="zPriorMin", help="""Set minimum redshift of prior.""", 
+                        default = None)
+    parser.add_argument("-Z", "--z-prior-max", dest="zPriorMax", help="""Set maximum redshift of prior.""", 
+                        default = None)
+    parser.add_argument("-b", "--brighter-absmag-cut", dest="absMagCut", help="""Set bright absolute magnitude cut.""", 
+                        default = -24.)
+    parser.add_argument("-n", "--name", dest="name", help="Find photo-z of only the named cluster in the catalog.")
+    parser.add_argument("-t", "--templates-directory", dest="templatesDir", help="""Specify a directory containing
+                        a custom set of spectral templates.""", 
+                        default = None)
+    
+    parser.add_argument("-W", "--write-galaxy-catalogs", dest="writeGalaxyCatalogs", action="store_true", 
+                        help="""Write out a .fits format galaxy catalog and DS9 .reg file for each cluster.""", 
+                        default = False)
+    parser.add_argument("-P", "--write-plots", dest="writePlots", action="store_true", 
+                        help = """Write out a .pdf plot of n(z) for each cluster.""", default = False)
+    parser.add_argument("-X", "--add-extra-photometry", dest="addExtraPhoto",
+                        help = """If using a user-supplied FITS galaxy photometic catalog, add in additional
+                        photometry from the given database (e.g., SDSSDR12, DECaLS - see 'database'),
+                        if available.""", default = None)
+    parser.add_argument("--min-background-area-Mpc2", dest="minBackgroundAreaMpc2", default = 11, type = float,
+                        help="""The minimum area of the background region in square Mpc. Candidate redshifts that have
+                        less than this minimum background area will be filtered out of the output catalog (default: 11, 
+                        which corresponds to 50%% of the background area for the standard 3-4 Mpc annulus used).""")
+    
+    parser.add_argument("-A", "--background-area-deg2", dest="bckAreaDeg2", default = None, help="""The area, 
+                        in square degrees, covered by the background galaxy catalog given using the -B flag.""")
+    parser.add_argument("-C", "--credentials-filename", dest="credentialsFileName", default = None, 
+                        help = """The location of a file containing username (first line), password (second line), 
+                        for login to e.g., ESO Portal (this option is only currently used for the KIDSDR3
+                        database option).""")
+    parser.add_argument("-zLow", dest ="zLowerlim", default= None, type = float, help="""The lower redshift bound for the chosen cluster redshift range """)
+    parser.add_argument("-zUpper", dest= "zUpperlim", default=None, type = float, help="""The upper redshift bound for the chosen cluster redshift range  """)
+    parser.add_argument("-zCent", dest= "zCenter", default=None, type = float, help="""The median for the chosen cluster redshift range  """)
+    parser.add_argument("-lnum", dest= "leftnc", default=0, type = int, help="""left-endpoint for number of clusters to use if using slicing  """)
+    parser.add_argument("-rnum", dest= "rightnc", default=None, type = int, help="""right-endpoint for number of clusters to use if using slicing  """)
+
+    args = parser.parse_args()
+    
+   
+    catalogFileName=args.catalogFileName
+    database=args.database
+    cacheDir=args.cacheDir
+    weightsType=args.weightsType
+    templatesDir=args.templatesDir
+    maxRMpc=float(args.maxRMpc)
+    method=args.algorithm
+    MPIEnabled=args.MPIEnabled
+    maxMagError=float(args.maxMagError)
+    #magsBrighterMStarCut=float(args.magsBrighterMStarCut)
+    absMagCut=float(args.absMagCut)
+    writeGalaxyCatalogs=args.writeGalaxyCatalogs
+    writePlots=args.writePlots
+    maskPath=args.mask
+    ZPError=args.ZPError
+    maxIter=args.maxIter
+    zLowerlim=args.zLowerlim
+    zUpperlim=args.zUpperlim
+    zCenter=args.zCenter
+    leftnc=args.leftnc
+    rightnc=args.rightnc
+    
+    # Set-up cache
+    if cacheDir is not None:
+        if os.path.exists(cacheDir) == False:
+            os.makedirs(cacheDir, exist_ok=True)
+    else:
+        if os.path.exists(retrievers.CACHE_DIR) == False:
+                os.makedirs(retrievers.CACHE_DIR, exist_ok = True)
+                
+    # Set-up where we will write output
+    os.makedirs(args.outDir, exist_ok = True)
+    outFileName=args.outDir+os.path.sep+"zLF_catalog_%.3f_%.3f.fits"  
+    
+    # Method for fetching catalogs
+    retriever, retrieverOptions, passbandSet=retrievers.getRetriever(database, maxMagError = 0.2)
+    photoRedshiftEngine=PhotoRedshiftEngine.PhotoRedshiftEngine(absMagCut, ZPError = ZPError, passbandSet = passbandSet)
+    
+    bands=photoRedshiftEngine.bands
+    bandErrs=[]
+    for b in bands:
+        bandErrs.append(b+"Err")
+    bands=bands+bandErrs
+    
+    """if database == 'DECaLS':
+        # Zero point offsets remove bias from galaxy max likelihood photo-zs when testing on SDSS
+        ZPOffsets=np.array([0.02271222, -0.05051711, -0.02465597, -0.00406835, 0.05406105])"""
+        
+    if cacheDir is not None:
+        retrieverOptions['altCacheDir']=cacheDir
+        
+        
+        
+    
+    """Measuring cluster LFs"""
+
+    clusterCat =atpy.Table().read(catalogFileName)         #catalogFileName is given argument by user
+    
+    binEdges =np.linspace(17.0,22.5,num=12)                #adopted BMcut=22.5 from cluster mag. distribution
+    binCentres =(binEdges[:-1]+binEdges[1:])/2
+    compnumGal =np.array(binCentres.shape)
+    comprichnessN = np.array(binCentres.shape)             #empty array for richness weighting
+    
+    #original redshift range chosen for M Sc project
+    clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>zLowerlim,clusterCat['redshift']<zUpperlim)][leftnc:rightnc]
+    clusterCentz = zCenter
+    
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.30,clusterCat['redshift']<0.40)][0:10] #10 clusters 
+    #clusterCentz = 0.35
+    
+    """redshift subsamples to play around with"""
+    
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.10, clusterCat['redshift']<0.20)]
+    
+    #sample 1
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.30,clusterCat['redshift']<0.35)] #[0:10]
+    
+    #sample 2
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.35,clusterCat['redshift']<0.40)] #[0:10]
+    
+    #sample 3
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.40,clusterCat['redshift']<0.45)] #[0:10]
+    
+    #sample 4
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.45,clusterCat['redshift']<0.50)] #[0:20]
+    
+    #sample 5
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.50,clusterCat['redshift']<0.55)] #[0:10]
+    
+    #sample 6
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.55,clusterCat['redshift']<0.60)] #[0:10]
+    
+    #sample 7
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.65,clusterCat['redshift']<0.70)] #[0:10]
+    
+    #sample 8
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.70,clusterCat['redshift']<0.75)] #[0:10]
+    
+    #sample 9
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.75,clusterCat['redshift']<0.80)] #[0:10]
+    
+    #sample 10
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.80, clusterCat['redshift']<0.85)] #[0:20]
+    
+    #sample 11
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.85, clusterCat['redshift']<0.90)] #[0:20]
+    
+    #sample 12
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.90, clusterCat['redshift']<0.95)]
+    
+    #sample 13
+    #clusterCat=clusterCat[np.logical_and(clusterCat['redshift']>0.95, clusterCat['redshift']<1.0)]
+    
+    print("...fetching sub-sample clusters...")
+    
+    #richnessN=np.zeros(len(clusterCat)) - array method
+    richnesslist = []    #list method
+    numGallist=[]
+    
+    #debugging for catalogs
+    """import IPython
+    IPython.embed()
+    sys.exit()"""
+    
+    
+    for cluster in clusterCat:
+    #for cluster in clusterCat:
+         
+              
+        #create LF for each cluster and then sum them to get composite LF
+        print("...fetching galaxy catalogs...")
+        galaxyCatalog=retriever(cluster['RADeg'],cluster['decDeg'], optionsDict = retrieverOptions)
+        
+        if galaxyCatalog is None:
+            continue
+        
+        print("...calculating photozs...")
+        photoRedshiftEngine.calcPhotoRedshifts(galaxyCatalog, calcMLRedshiftAndOdds = True)
+        
+        numGal =np.zeros(binCentres.shape)                 #array number of galaxies in cluster
+                   
+        R200m = calcRDeltaMpc(cluster['redshift'],cluster['M200m']*1e14,fiducialCosmoModel, delta=200, wrt='mean') 
+        
+        """converting R200m to degrees""" 
+        cluster_dA=astCalc.da(cluster['redshift'])
+        R200rad = R200m/cluster_dA
+        R200deg = np.rad2deg(R200rad)
+       
+        richness =0                                        #richness variable
+       
+             
+  
+        for galaxy in galaxyCatalog:
+            
+            """calculate rDeg for galaxies"""
+            rDeg = astCoords.calcAngSepDeg(galaxy['RADeg'],galaxy['decDeg'],cluster['RADeg'], cluster['decDeg'])
+            
+            #calc absolute magnitudes
+            DA = astCalc.da(cluster["redshift"])           #Angular diameter distance
+            DL = astCalc.dl(cluster["redshift"])           #Luminosity distance
+            dm= 5*(np.log10(DL*1e5))                       #distance modulus
+            absR = galaxy["r"]-dm                          #R-band absolute mag. 
+            absRlim = -20
+            
+             
+            
+            """Cluster members cut-off""" 
+            print("...selecting cluster members within R200deg...")
+            if rDeg < R200deg:
+                
+                pz_z = galaxy["pz_z"]                      
+                pz = galaxy["pz"]
+                
+                
+                mask=np.logical_and(pz_z >cluster["redshift"]-0.1, 
+        		 		pz_z<cluster["redshift"]+0.1)
+        				
+                
+                prob= np.trapz(pz[mask], pz_z[mask])
+                
+                
+                kCorrectedMags=applyKCorrection(galaxy["r"], cluster["redshift"], 'r', 'r', zToCorrectTo = clusterCentz)
+                
+                Appmagmask =np.logical_and(galaxy["r"]<=binEdges[1:], galaxy["r"]>=binEdges[:-1]) 
+                numGal[Appmagmask]= numGal[Appmagmask]+prob
+                
+        
+                if absR < absRlim:
+                    
+                    richness= richness+prob                #richnessN[i]=richnessN[i]+prob (array method)
+                    
+
+        #comprichnessN = richnessN.sum() - array method
+        #compnumGal=numGal+compnumGal - array method
+        
+        
+        """list method for richness and number of galaxies per cluster"""
+        if richness>0:                                     #to get rid of clusters with 0 richness
+            richnesslist.append(richness)
+            numGallist.append(numGal)
+
+
+    """converting lists to arrays"""
+    richnessArr=np.array(richnesslist)
+    numGalArr=np.array(numGallist)
+    numGalArr/richness                                     #applying richness   
+    
+    
+    
+    compnumGal=compnumGal+numGalArr.sum(axis=0)    
+    
+    
+    
+
+    #Print some stats
+    print("Number of clusters:",len(clusterCat))           #print the number of clusters
+    print("Cluster redshifts:", clusterCat["redshift"])    #print cluster redshifts
+    
+    
+    #Plotting LF
+    print("...plotting LF...")
+    yerr =np.sqrt(compnumGal)
+    fig,ax=plt.subplots()
+    ax.errorbar(binCentres,compnumGal,yerr=yerr,fmt='-o',ls='')
+    ax.set_xlabel('r (AB)')                                #apparent r-band mags.       
+    ax.set_ylabel('N')                                     #no. of galaxies in each magnitude bin per cluster
+    ax.set_title('Composite LF for 10 clusters: 0.20 < z < 0.25')                   #add redshift range
+    plt.gca().invert_xaxis()
+    plt.semilogy() 
+    #plt.savefig('test.png')
+    plt.show()
+       
+    #Add this for debugging
+    import IPython
+    IPython.embed()
+    sys.exit()
+        
+    #volume-limited sample for richness
+    #dist. mod
+        
+    #need an array for rAbsolute
+
+   
+
+
+"""Extra stuff and Notes   """
+
+#convert observed apparent mags. of galaxies to absolute mags. using measured photoz to give distance   modulus(m-M)
+             
+#DA = astCalc.da(cluster["redshift"]) Angular diameter dist.
+#DL = astCalc.dl(cluster["redshift"]) DL is luminosity dist.
+#dm= 5*(np.log10(DL*1e5))             distance modulus
+#rAbsolute = galaxy["r"]-dm           absolute mags. 
+             
+        
+        
+              
+#absolute mag.
+#DA = astCalc.da(cluster["redshift"]) #Angular diameter dist.
+#DL = astCalc.dl(cluster["redshift"])
+#dm= 5*(np.log10(DL*1e5))         
+#rAbsolute = galaxy["r"]-dm               
+#Rmagmask =np.logical_and(rAbsolute<=binEdges[1:],rAbsolute>=binEdges[:-1])
+#RnumGal[Rmagmask]=RnumGal[Rmagmask]+prob
+#RcompnumGal =RnumGal +RcompnumGal
+            
+            		 
+            		 	           
+                 
+#convert observed apparent mags. of galaxies to absolute mags. using measured photoz to give distance modulus(m-M)
+            
+#DA = astCalc.da(cluster["redshift"]) #Angular diameter dist.
+#DL = astCalc.dl(cluster["redshift"]) #DL is luminosity dist.
+#dm= 5*(np.log10(DL*1e5))             #distance modulus
+#rAbsolute = galaxy["r"]-dm           #absolute mags. 
+                       
+                    
+#for LF, use a weight, need to calc luminosities. Calc.r-band mag           
+#integrates over pz(redshift prob.), pz_z (redshift)
+#steps to calc. LF
+#one to specify binning of apparent  r- band magnitude
+#one to specify no. of bins
+#create 2 blank arrays for these objects  
+#figure k-coreections later
+#histogram of r-band mags vs no.of galaxies      
+
+    
