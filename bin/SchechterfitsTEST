@@ -1,0 +1,286 @@
+#!/usr/bin/env python
+
+"""Schechter function fitting for composite LFs """
+
+import os
+import sys
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+import astropy.table as atpy
+import astropy.io.fits as pyfits
+from scipy.optimize import fmin
+from astLib import *
+from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
+import time
+import statistics
+
+
+
+"""Define Schechter function - predicted model"""
+#------------------------------------------------------------------------------------------------------------
+def schechterm(params, magnitude):
+    """Schechter luminosity function by magnitudes."""
+    """params = mstar,alpha, ###phiStar"""
+    
+    mstarMinm = 0.4 *(params[0]- magnitude) 
+    return (0.4 * np.log(10) *(10.0)**(mstarMinm * (params[1] + 1.)) * np.exp(-10.**(mstarMinm)))
+    
+#------------------------------------------------------------------------------------------------------------
+
+
+"""Chi-squared function"""
+#------------------------------------------------------------------------------------------------------------
+def get_chisq(params,N,Nerr,mr,phiStar):
+    
+    model = phiStar*schechterm(params,mr)
+    dY=N-model
+    
+    #Nerr =0??
+    return (np.sum((dY/Nerr)**2))
+    
+#------------------------------------------------------------------------------------------------------------
+
+
+
+"""Brute-force fitting"""
+#------------------------------------------------------------------------------------------------------------
+def LFfit(N, Nerr, mr):
+    
+    
+    #lists for checking phiStar is uniform
+    phiStarlist=[]
+    modelNlist=[]
+    mstarlist=[]
+    alphalist=[]
+    dmlist=[]
+    dalist=[]
+    
+     
+    ntest=100
+    mstar = np.linspace(17.0,22.5,ntest)
+    alpha = np.linspace(-2.5, 0.0, ntest)    
+    chisq = np.zeros((ntest,ntest))
+    
+    for k in range(100):
+        
+    
+        for i in range(ntest):
+            for j in range(ntest):
+            
+                modelN= schechterm((mstar[i],alpha[j]),mr)
+                phiStar=(np.sum(N))/(np.sum(modelN))
+                modelNlist.append(modelN)
+                phiStarlist.append(phiStar)
+            
+                chisq[i,j]=get_chisq((mstar[i],alpha[j]),N,Nerr,mr,phiStar)
+            
+        prob_lhd = np.exp(-0.5*chisq)
+        i,j = np.unravel_index(prob_lhd.argmax(),prob_lhd.shape)
+        mstarbf=mstar[i]
+        mstarlist.append(mstarbf)
+        alphabf=alpha[j]
+        alphalist.append(alphabf)
+        newparams =mstarbf,alphabf
+        
+        
+        dm = (mstar.max()-mstar.min())/4
+        dmlist.append(dm)
+        da= (alpha.max()-alpha.min())/4
+        dalist.append(da)
+        
+        if dm<0.01 or da<0.01:
+            break
+
+
+            
+        #print(k, mstarbf, alphabf)
+        
+        
+        mstar=np.linspace(mstarbf-dm,mstarbf+dm,ntest)
+        alpha=np.linspace(alphabf-da,alphabf+da,ntest)
+        
+    
+    
+    return newparams, chisq, mstarlist, alphalist, dmlist, dalist, phiStarlist   
+#------------------------------------------------------------------------------------------------------------
+
+
+
+start=time.time() 
+if __name__ == '__main__':
+    
+    parser = argparse.ArgumentParser("SchechterfitsTEST")
+    parser.add_argument("LFfileName", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("-zLow", dest ="zLowerlim", default= None, type = float, help="""The lower redshift bound for the chosen cluster redshift range """)
+    parser.add_argument("-zUp", dest= "zUpperlim", default=None, type = float, help="""The upper redshift bound for the chosen cluster redshift range  """)
+    parser.add_argument("-numC", dest="numClusters", default=None, type= int, help="""The number of clusters in z bin - use SF-LF title as reference""")
+    parser.add_argument("-ylim", dest="ylowerlim", default=0.5, type=float, help="""Lower y limit for plotting """)
+    
+    #parser.add_argument("-mLow", dest ="mLowerlim", default= None, type = float, help="""The lower mass bound """)
+    #parser.add_argument("-mUp", dest= "mUpperlim", default=None, type = float, help="""The upper mass bound  """)
+    
+    args = parser.parse_args()
+    LFfileName=args.LFfileName
+    catalogFileName=args.catalogFileName
+    zLowerlim=args.zLowerlim
+    zUpperlim=args.zUpperlim
+    numClusters=args.numClusters
+    ylowerlim=args.ylowerlim
+    #mLowerlim=args.mLowerlim
+    #mUpperlim=args.mUpperlim
+    
+    
+    obsLF =atpy.Table().read(LFfileName)
+    clusterCat= atpy.Table().read(catalogFileName)
+    
+    """
+    print(">>> Total time: {:.1g} minutes".format((time.time()-start)/60.))
+    
+    import IPython
+    IPython.embed()
+    sys.exit()
+    """
+
+    
+    """Brute-force method for best fit values"""
+    Schechterfit = LFfit(obsLF['N'],obsLF['Nerr'],obsLF['mr'])
+    newparams=Schechterfit[0][0],Schechterfit[0][1]
+    chisq = Schechterfit[1]
+    mstarlist = Schechterfit[2]
+    alphalist=Schechterfit[3]
+    dmlist =Schechterfit[4]                           #list of grid search ranges for mstar
+    dalist=Schechterfit[5]                            #list of grid search ranges for alpha
+    phiStarlist =Schechterfit[6]                      #to check phiStar values in grid
+    
+    
+    """
+    print(">>> Total time: {:.1g} minutes".format((time.time()-start)/60.))
+    
+    import IPython
+    IPython.embed()
+    sys.exit()
+    """
+    
+
+   
+    
+    #Monte-Carlo sims
+    N=10            #stepsize for MC sims - must use a high number
+    MCmstarlist=[]
+    MCalphalist=[]
+    
+    for k in range(N):
+    
+        #generate random realizations for LF using Poisson uncert.
+        LFrand = np.random.poisson(obsLF['N']) 
+    
+        
+        MCfit = LFfit(LFrand,obsLF['Nerr'],obsLF['mr'])
+        
+        MCparams=MCfit[0][0],MCfit[0][1]
+        MCmstarlist.append(MCparams[0])
+        MCalphalist.append(MCparams[1])
+        
+        
+        
+    uncms=np.std(MCmstarlist)
+    uncalp=np.std(MCalphalist)
+    
+    
+    
+    
+    """finding Mstar"""
+    
+    zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent)                      #Angular diameter distance
+    DL = astCalc.dl(zCent)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar = newparams[0]-dm 
+    
+    dof = len(obsLF['N'])-2  
+    
+    
+    
+    """Plotting"""
+    
+    modelmr=np.linspace(17.0,22.5,100)
+    y = schechterm(newparams,obsLF['mr'])
+    phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+    new_modelN = phiStar*schechterm(newparams,modelmr)  
+    
+    fig, ax= plt.subplots()
+    ax.errorbar(obsLF['mr'], obsLF['N'], yerr=obsLF['Nerr'], fmt='ko', capsize=3)
+    
+    #for mass subsets
+    #ax.errorbar(obsLF['mr'],obsLF['N'],yerr=obsLF['Nerr'], fmt='bo', capsize=3)       #low mass
+    #ax.errorbar(obsLF['mr'],obsLF['N'],yerr=obsLF['Nerr'], fmt='ro', capsize=3)       #high mass
+    
+    ax.plot(modelmr,new_modelN,color='k',ls='-')         #total
+    
+    #ax.plot(modelmr,new_modelN,color='b',ls='--')         #low mass
+    #ax.plot(modelmr,new_modelN,color='r',ls=':')          #high mass
+    
+    
+    
+    
+    #ax.plot(modelmr,ysmoothed)
+    ax.set_xlabel(r"$m_{r}$")
+    ax.set_ylabel("N")
+    ax.set_title("Composite LF for"+' '+str(numClusters)+' '+"clusters:"+' '+"{:.2f}".format(zLowerlim)+' < z <'+ "{:.2f}".format(zUpperlim))
+    
+    
+    """for mass LF"""
+    #ax.set_title("Low-mass subset LF:"+str(zLowerlim)+' < z <'+ str(zUpperlim)+' '+"for"+' '+str(numClusters)+' '+"clusters")
+    #ax.set_title("high-mass subset LF:"+str(zLowerlim)+' < z <'+ str(zUpperlim)+' '+"for"+' '+str(numClusters)+' '+"clusters")
+    
+    
+    
+    at= AnchoredText(r"$\chi^2={:.2f}$".format(chisq.min())+'\n'+r"$dof={:.2f}$".format(dof)+'\n'+r"$\phi^* ={:.2f}$".format(phiStar)+'\n'+r"$\alpha ={:.2f}$".format(newparams[1])+r"$\pm$"+"{:.2f}".format(uncalp)+'\n'+r"$m^* ={:.2f}$".format(newparams[0])+r"$\pm$"+"{:.2f}".format(uncms)+'\n'+r"$M^* ={:.2f}$".format(Mstar), prop=dict(size=7), frameon=True, loc=1,)
+    
+    
+    at.patch.set_boxstyle("round,pad=0, rounding_size=0.2")
+    ax.add_artist(at)
+    #ax.legend()
+    ax.tick_params(axis='x',which='both',direction='in')
+    ax.minorticks_on()
+    
+
+    ax.tick_params(axis='y', which='both', direction="in")
+    plt.ylim(ylowerlim, 50000)
+    plt.xlim(16.5,22.5)
+    plt.semilogy()
+    plt.gca().invert_xaxis()
+    plt.show()
+    
+    print(">>> Total time: {:.1g} minutes".format((time.time()-start)/60.))
+    
+    
+    print("No. of clusters in bin:", numClusters)
+    print("Redshift interval:","{:.2f}".format(zLowerlim)+' < z <'+ "{:.2f}".format(zUpperlim))
+    #for mass subsets:
+    print("Mass range:", clusterCat['Cluster mass'].min(),'< M200m <',clusterCat['Cluster mass'].max())
+    print("Chi-squared value:",chisq.min())
+    print("Degrees of freedom:", dof)
+    print("Phistar:",phiStar)
+    print("mstar:",newparams[0])
+    print("Uncertainties in mstar:",uncms)
+    print("alpha:",newparams[1])
+    print("Uncertainties in alpha:",uncalp)
+    print("Mstar:", Mstar)
+    print("Sum of model times phiStar:", np.sum(phiStar*schechterm(newparams,obsLF['mr'])))
+    print("No. of galaxies in observed LF:", np.sum(obsLF['N']))
+    
+    
+    import IPython
+    IPython.embed()
+    sys.exit()
+    
+    
+    
+    
+    
+
+
+
