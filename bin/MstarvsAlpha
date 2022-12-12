@@ -1,0 +1,261 @@
+#!/usr/bin/env python
+
+#Shows evolution of charactersitic magnitude m vs faint-end slope alpha*
+
+from astLib import *
+import numpy as np
+import pylab
+import matplotlib.pyplot as plt
+
+
+#full sample
+
+
+mags = [18.513454861111118, 18.910156249999996, 19.102864583333336, 19.395399305555557, 19.96050347222222, 20.189670138888886, 20.52387152777778, 20.63411458333333, 20.62977430555556, 20.558593750000007, 20.61414930555556, 20.61501736111111]
+uncms = [0.0193095441398325, 0.02024558271624667, 0.03422526062307124, 0.04139406914320196, 0.0338111193552135, 0.04708823170295571, 0.0580538993148985, 0.0843400549518392, 0.10207905626536393, 0.12719808263334031, 0.16157023259628012, 0.2307649723165938]
+
+alpha=[-1.1764125631313131, -1.1803582702020203, -1.3054371843434347, -1.3259548611111112, -1.1862768308080809, -1.2131076388888888, -1.2012705176767677, -1.3283222853535355, -1.504695391414141, -1.7150015782828283,  -1.9418797348484849, -2.1888809974747474]
+uncalp= [0.005497942837909839, 0.006505689368338636, 0.009809989429282613, 0.014512557210657301, 0.014905654626091142, 0.02264531845511133, 0.031797670212636055, 0.046851157375204226, 0.052611313260444784, 0.06093432730730609, 0.07765705161421312, 0.10454518513548693]
+
+
+
+#Low-mass subset
+
+low_mags=[18.51866319444445, 18.914496527777782, 19.102864583333336, 19.424913194444443,  19.889322916666664, 20.03428819444445, 20.36501736111111, 20.267795138888886, 20.305989583333332, 20.850260416666668, 21.19835069444444, 20.139322916666664]
+low_uncms = [0.04785959564248075, 0.05094662897253457, 0.07688074580629307, 0.08326731499530789, 0.09062791174747084, 0.12164732847079954, 0.14185899060727764, 0.2710191678465705, 0.15666263759954294, 0.25211903502421645, 0.2983471990216071, 1.8222463114937244] 
+
+low_alpha=[-1.1811474116161613, -1.1823311237373737, -1.294783775252525, -1.2900489267676765, -1.2273121843434347, -1.2987294823232325, -1.3093828914141412, -1.4739188762626263, -1.6230666035353534, -1.6262231691919193, -1.6356928661616157, -2.3577572601010104]
+low_uncalp= [0.013463327479513048, 0.016162768578142122, 0.02208243802643884, 0.028033124754775735, 0.036824568037253494, 0.050782903109387205, 0.06770956118209284, 0.11390826467524261, 0.06775124947483892, 0.15172295331434468, 0.2161558746721275, 0.8264346996044104]
+
+
+#High-mass subset
+high_mags=[18.482204861111107, 18.96571180555555, 19.20529513888889, 19.621961805555557, 20.069010416666668, 20.311197916666668, 20.67317708333334, 20.84765625, 20.682725694444443, 20.60199652777778, 20.368489583333332,21.13585069444444]
+high_uncms = [0.03077602144288097, 0.033553075927557754, 0.05774157205800255, 0.0578105607821971, 0.04684861106961394, 0.06940756524543487, 0.08751018528131821, 0.10624111100877412, 0.15952145258363917, 0.22684208916052923, 0.25100746689680803, 0.5531022490220626]
+
+high_alpha=[-1.1547111742424243, -1.1298532196969697, -1.2600615530303028, -1.2470407196969697, -1.105389835858586, -1.1247238005050504, -1.0876341540404042, -1.1799636994949492, -1.494041982323232, -1.7146070075757573, -2.0705097853535355, -2.053543244949495]
+high_uncalp=[0.008727938253113432, 0.011300002209650417, 0.018441173360265028, 0.026039427916735382, 0.02404498931867283, 0.03674597383234895, 0.054169411747786195, 0.06947121337252149, 0.08686312828264443, 0.11266866593839572, 0.10095127628561382, 0.2957681594336112]
+
+
+
+#Popesso2006 - 69 clusters (total LF, just r-band)
+P_zCent=0.1
+#calc absolute magnitudes
+DA = astCalc.da(P_zCent)           #Angular diameter distance
+DL = astCalc.dl(P_zCent)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+
+#Schechter+Exponential
+PSEr_mag=-21.16+dm
+PSEr_uncert=0.26
+PSE_alpha=-1.26
+PSE_uncert=0.12
+
+#late-type galaxies in R200
+Plr_mag = -21.71+dm
+Plr_uncert=0.52
+Pl_alpha=-1.87
+Pl_uncert=0.04
+
+
+#Hansen2009 - i-band converted to z-band by Zhang2019
+H_zCent=0.40
+#calc absolute magnitudes
+DA = astCalc.da(H_zCent)           #Angular diameter distance
+DL = astCalc.dl(H_zCent)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+
+bc03 = astSED.BC03Model("ancillaryData/BC03Models/tau0p1Gyr_m62.20")
+m=bc03.getSED(0.1, z= 0.40)
+H_zapp = -22.13+dm
+z= astSED.Passband('/home/dames/zCluster/zCluster/passbands/z_SDSS.res')
+r=astSED.Passband('/home/dames/zCluster/zCluster/passbands/r_SDSS.res')
+rz = m.calcColour(r,z,magType='AB')   #r-z difference
+
+
+Hz_mag= H_zapp+rz
+H_alpha=-0.28
+H_uncert=0.06
+
+
+#Montero-Dorta 2009
+M_zCent=0.1
+#calc absolute magnitudes
+DA = astCalc.da(M_zCent)           #Angular diameter distance
+DL = astCalc.dl(M_zCent)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+#r-band
+Mr_mag = -20.71+dm
+Mr_uncms=0.04
+
+#r-band
+Mr_alpha=-1.26
+Mr_uncalp=0.02
+
+
+#Loveday2011 - field LF, 0.002 < z < 0.5, z< 0.1 low-z 
+L_zCent=0.1
+#calc absolute magnitudes
+DA = astCalc.da(L_zCent)           #Angular diameter distance
+DL = astCalc.dl(L_zCent)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+
+bc03 = astSED.BC03Model("ancillaryData/BC03Models/tau0p1Gyr_m62.20")
+m=bc03.getSED(0.1, z= 0.1)
+
+
+#r-band
+Lr_mag= -20.73+dm
+Lr_uncms=0.03
+Lr_alpha=-1.26
+Lr_uncalp=0.02
+
+
+
+
+#Zhang2019 - apparent z band
+#0.1<z<0.4 - 64 clusters
+Z_zCent=0.25
+r= astSED.Passband('/home/dames/zCluster/zCluster/passbands/rDES.res')
+z=astSED.Passband('/home/dames/zCluster/zCluster/passbands/zDES.res')
+bc03 = astSED.BC03Model("ancillaryData/BC03Models/tau0p1Gyr_m62.20")
+m=bc03.getSED(0.1, z= 0.25)
+rz = m.calcColour(r,z,magType='AB')   #r-z difference
+
+zapp = 18.17     #m_z = 18.17+-0.18
+
+Z_mag = zapp + rz   #r-band apparent mag. 
+Z_uncert=0.18
+Z1_alpha= -0.80
+Z1_uncert=0.12
+
+#0.4<z<1.05 -27 clusters
+Z2_zCent=0.49
+m2=bc03.getSED(0.1, z= 0.49)
+rz2 = m2.calcColour(r,z,magType='AB')   #r-z difference
+
+zapp2 = 19.96     #m_z = 19.96+-0.23
+
+Z_mag2 = zapp2 + rz2   #r-band apparent mag. 
+Z_uncert2=0.23
+Z2_alpha= -0.55
+Z2_uncert=0.18
+
+
+#Puddu2020 - r-band in KiDS DR3 (Assume to be SDSS)
+Pud_zCent1= 0.24
+#calc absolute magnitudes
+DA = astCalc.da(Pud_zCent1)           #Angular diameter distance
+DL = astCalc.dl(Pud_zCent1)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+Pud_M1=-21.50
+Pud_M1uncms=0.03
+
+Pud_mag1 = Pud_M1 +dm   #-5
+Pud1_alpha= -1.04
+Pud1_uncalp=0.03
+
+
+Pud_zCent2 =0.41
+#calc absolute magnitudes
+DA = astCalc.da(Pud_zCent2)           #Angular diameter distance
+DL = astCalc.dl(Pud_zCent2)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+Pud_M2=-21.59
+Pud_M2uncms=0.04
+
+Pud_mag2 = Pud_M2 +dm
+Pud2_alpha = -0.92
+Pud2_uncalp=0.05
+
+Pud_zCent3 =0.50
+#calc absolute magnitudes
+DA = astCalc.da(Pud_zCent3)           #Angular diameter distance
+DL = astCalc.dl(Pud_zCent3)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+Pud_M3=-21.65
+Pud_M3uncms=0.05
+
+Pud_mag3 = Pud_M3 +dm
+Pud3_alpha= -0.87
+Pud3_uncalp= 0.07
+
+
+Pud_zCent4 =0.63
+#calc absolute magnitudes
+DA = astCalc.da(Pud_zCent4)           #Angular diameter distance
+DL = astCalc.dl(Pud_zCent4)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+Pud_M4=-21.61
+Pud_M4uncms=0.05
+
+Pud_mag4 = Pud_M4 +dm
+Pud4_alpha= -0.63
+Pud4_uncalp= 0.11
+
+
+
+fig, ax= plt.subplots()
+
+
+ax.errorbar(alpha, mags, xerr=uncalp,yerr=uncms, fmt='ks', capsize=4)
+ax.plot(alpha, mags, 'ks', label= 'This work: All')
+
+ax.errorbar(low_alpha, low_mags, xerr=low_uncalp , yerr=low_uncms, fmt='b^', capsize=4)
+ax.plot(low_alpha, low_mags, 'b^', label='This work: low-mass')
+
+ax.errorbar(high_alpha, high_mags, xerr= high_uncalp, yerr=high_uncms, fmt='r^', capsize=4)
+ax.plot(high_alpha, high_mags, 'r^', label='This work: high-mass')
+
+
+ax.errorbar(PSE_alpha, PSEr_mag,xerr= PSE_uncert, yerr=PSEr_uncert, color='#76EE00',fmt='D', capsize=4)
+ax.plot(PSE_alpha, PSEr_mag,color='#76EE00',marker='D', ls=" ", label='Popesso 2006')
+ax.errorbar(Pl_alpha, Plr_mag, xerr=Pl_uncert ,yerr=Plr_uncert,fmt='gD', capsize=4)
+ax.plot(Pl_alpha, Plr_mag, 'gD',label='Popesso 2006: LTGs')
+
+
+ax.errorbar(H_alpha, Hz_mag, xerr=H_uncert, color='#EE7AE9',fmt='p', capsize=4)
+ax.plot(H_alpha, Hz_mag, color='#EE7AE9', marker='p', ls=" ", label='Hansen 2009')
+
+ax.errorbar(Mr_alpha, Mr_mag, xerr= Mr_uncalp, yerr=Mr_uncms, color ='#FF8000',fmt='o', capsize=4)
+ax.plot(M_zCent, Mr_alpha, color = '#FF8000',marker='o', ls=" ", label='Montero-Dorta & Prada 2009')
+
+
+ax.errorbar(Lr_alpha, Lr_mag, xerr= Lr_uncalp,yerr= Lr_uncms, color='#00688B',fmt='P', capsize=4)
+ax.plot(Lr_alpha, Lr_mag, color='#00688B',marker='P', ls=" ", label='Loveday 2011')
+
+
+ax.errorbar(Z1_alpha, Z_mag, xerr=Z1_uncert, yerr= Z_uncert,color= '#FFFF00',fmt='v', capsize=4)
+ax.plot(Z1_alpha, Z_mag, color='#FFFF00', marker='v',ls=" ", label='Zhang 2019')
+ax.errorbar(Z2_alpha, Z_mag2, xerr=Z2_uncert, yerr= Z_uncert2, color= '#FFFF00',fmt='v', capsize=4)
+ax.plot(Z2_alpha, Z_mag2, color='#FFFF00', marker='v',ls=" ")
+
+
+ax.errorbar(Pud1_alpha, Pud_mag1,xerr=Pud1_uncalp, yerr= Pud_M1uncms,color= '#00EEEE',fmt='h', capsize=4)
+ax.plot(Pud1_alpha,Pud_mag1, color='#00EEEE', marker='h',ls=" ", label='Puddu 2021')
+ax.errorbar(Pud2_alpha, Pud_mag2,xerr=Pud2_uncalp, yerr= Pud_M2uncms, color= '#00EEEE',fmt='h', capsize=4)
+ax.plot(Pud2_alpha,Pud_mag2, color='#00EEEE', marker='h', ls=" ")
+ax.errorbar(Pud3_alpha, Pud_mag3, xerr= Pud3_uncalp, yerr=Pud_M3uncms, color= '#00EEEE',fmt='h', capsize=4)
+ax.plot(Pud3_alpha, Pud_mag3,color='#00EEEE', marker='h', ls=" ")
+ax.errorbar(Pud4_alpha, Pud_mag4, xerr= Pud4_uncalp, yerr=Pud_M4uncms, color= '#00EEEE',fmt='h', capsize=4)
+ax.plot(Pud4_alpha, Pud_mag4, color='#00EEEE', marker='h', ls=" ")
+
+
+
+
+ax.tick_params(axis='x',which='both',direction='in')
+ax.minorticks_on()
+ax.tick_params(axis='y', which='both', direction="in")
+
+plt.xlim(-3.00, -0.10)
+plt.ylim(16, 23)
+plt.xlabel(r'$\alpha$')
+plt.ylabel(r'$m^{*}$')
+plt.title(r'$m^{*}$'+' '+'vs'+ ' '+r'$\alpha$', fontsize=20)
+#plt.title(r'$m^{*}$'+' '+'vs'+ ' '+r'$z$'+' '+'- Mass subsets')
+plt.legend(prop={'size': 5.5}, frameon=False)
+plt.show()
+
+
+import IPython
+IPython.embed()
+sys.exit()

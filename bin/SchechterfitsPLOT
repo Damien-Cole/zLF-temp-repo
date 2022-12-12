@@ -1,0 +1,310 @@
+#!/usr/bin/env python
+
+"""Schechter function fitting for composite LFs """
+
+import os
+import sys
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+import astropy.table as atpy
+import astropy.io.fits as pyfits
+from scipy.optimize import fmin
+from astLib import *
+from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
+import time
+import statistics
+
+
+
+"""Define Schechter function - predicted model"""
+#------------------------------------------------------------------------------------------------------------
+def schechterm(params, magnitude):
+    """Schechter luminosity function by magnitudes."""
+    """params = mstar,alpha, ###phiStar"""
+    
+    mstarMinm = 0.4 *(params[0]- magnitude) 
+    return (0.4 * np.log(10) *(10.0)**(mstarMinm * (params[1] + 1.)) * np.exp(-10.**(mstarMinm)))
+    
+#------------------------------------------------------------------------------------------------------------
+
+"""Define Absolute magnitude function - predicted model"""
+#------------------------------------------------------------------------------------------------------------
+def absMag(zCent, appr):
+    
+    DA = astCalc.da(zCent)           #Angular diameter distance
+    DL = astCalc.dl(zCent)           #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))         #distance modulus
+    absR = appr-dm 
+    
+    return absR
+    
+#------------------------------------------------------------------------------------------------------------
+
+
+start=time.time() 
+if __name__ == '__main__':
+    
+    parser = argparse.ArgumentParser("SchechterfitsPLOT")
+    parser.add_argument("LFfileName", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("-zLow", dest ="zLowerlim", default= None, type = float, help="""The lower redshift bound for the chosen cluster redshift range """)
+    parser.add_argument("-zUp", dest= "zUpperlim", default=None, type = float, help="""The upper redshift bound for the chosen cluster redshift range  """)
+    parser.add_argument("-numC", dest="numClusters", default=None, type= int, help="""The number of clusters in z bin - use SF-LF title as reference""")
+    parser.add_argument("-ylim", dest="ylowerlim", default=0.5, type=float, help="""Lower y limit for plotting """)
+    parser.add_argument("-m", dest="mstar", default=None, type=float, help="""mstar value for plotting """)
+    parser.add_argument("-munc", dest="uncms", default=None, type=float, help="""Uncertainty in mstar """)
+    parser.add_argument("-a", dest="alpha", default=None, type=float, help="""alpha value for plotting """)
+    parser.add_argument("-aunc", dest="uncalp", default=None, type=float, help="""Uncertainty in alpha""")
+    parser.add_argument("-phi", dest="phiStar", default=None, type=float, help="""Chi squared value """)
+    parser.add_argument("-chi", dest="chisq", default=None, type=float, help="""Chi squared value """)
+    
+    
+    #parser.add_argument("-mLow", dest ="mLowerlim", default= None, type = float, help="""The lower mass bound """)
+    #parser.add_argument("-mUp", dest= "mUpperlim", default=None, type = float, help="""The upper mass bound  """)
+    
+    args = parser.parse_args()
+    LFfileName=args.LFfileName
+    catalogFileName=args.catalogFileName
+    zLowerlim=args.zLowerlim
+    zUpperlim=args.zUpperlim
+    numClusters=args.numClusters
+    ylowerlim=args.ylowerlim
+    mstar=args.mstar
+    uncms =args.uncms
+    alpha=args.alpha
+    uncalp=args.uncalp
+    phiStar=args.phiStar
+    chisq=args.chisq
+    
+    
+    obsLF =atpy.Table().read(LFfileName)
+    clusterCat= atpy.Table().read(catalogFileName)
+    
+   
+    """
+    #0.20 < z < 0.25 - 173 clusters
+    zCent=0.225
+    chisq= 100.92746262358654
+    newparams = 18.513454861111118, -1.1764125631313131
+    uncms=0.0193095441398325
+    uncalp=0.005497942837909839
+    phiStar = 4280.678716987008
+    Mstar= -21.731265793984665
+    
+    
+    #0.25 < z < 0.30 - 225 clusters
+    zCent=0.275
+    chisq= 254.31975096367336
+    newparams = 18.910156249999996, -1.1803582702020203
+    uncms=0.02024558271624667
+    uncalp=0.006505689368338636
+    phiStar = 5173.346801010524
+    Mstar= -21.829633418480324
+    
+    
+    #0.30 < z < 0.35 - 273 clusters
+    zCent=0.325
+    chisq=433.6021173949138
+    newparams = 19.102864583333336, -1.3054371843434347
+    uncms=0.03422526062307124
+    uncalp=0.009809989429282613
+    phiStar = 3370.3286052581598
+    Mstar= -22.055240761750788
+    
+    
+    #0.35 < z < 0.40 - 272 clusters
+    zCent=0.375
+    chisq= 297.7889440281746
+    newparams = 19.395399305555557, -1.3259548611111112
+    uncms=0.04139406914320196
+    uncalp=0.014512557210657301
+    phiStar = 3069.232718383244
+    Mstar= -22.12556521630861
+
+    
+    #0.40 < z < 0.45 - 338 clusters
+    zCent=0.425
+    chisq= 425.3912461608662
+    newparams = 19.96050347222222, -1.1862768308080809
+    uncms=0.0338111193552135
+    uncalp=0.014905654626091142
+    phiStar = 5201.185320750921
+    Mstar= -21.88120938502209
+    
+    
+    
+    #0.45 < z < 0.50 - 294 clusters
+    zCent=0.475
+    chisq= 315.2650738394097
+    newparams = 20.189670138888886, -1.2131076388888888
+    uncms=0.04708823170295571
+    uncalp=0.02264531845511133
+    phiStar = 3936.870254656553
+    Mstar= -21.939622886925576
+    
+    
+    #0.50 < z < 0.55 - 302 clusters
+    zCent=0.525
+    chisq= 495.5001695914424
+    newparams = 20.52387152777778,-1.2012705176767677 
+    uncms=0.0580538993148985
+    uncalp=0.031797670212636055
+    phiStar =4258.186544903768
+    Mstar= -21.86613597227855
+    
+    
+    #0.55 < z < 0.60 - 262 clusters
+    zCent=0.575
+    chisq= 333.0591926901403
+    newparams = 20.63411458333333, -1.3283222853535355
+    uncms=0.0843400549518392
+    uncalp=0.046851157375204226
+    phiStar =2975.7153327112355
+    Mstar= -21.99436193243742
+    
+    
+    #0.60 < z < 0.65 - 286 clusters
+    zCent=0.625
+    chisq= 264.86524425540557
+    newparams = 20.62977430555556, -1.504695391414141
+    uncms=0.10207905626536393
+    uncalp=0.052611313260444784
+    phiStar =2063.4306499324325
+    Mstar= -22.21842149542331
+    
+    
+    #0.65 < z < 0.70 - 227 clusters
+    zCent=0.675
+    chisq= 82.51452927429037
+    newparams = 20.558593750000007, -1.7150015782828283
+    uncms=0.12719808263334031
+    uncalp=0.06093432730730609
+    phiStar =832.3364775748565
+    Mstar= -22.49328581918448
+    
+    
+    #0.70 < z < 0.75 - 199 clusters
+    zCent=0.725
+    chisq= 32.715990539730875
+    newparams = 20.61414930555556, -1.9418797348484849
+    uncms=0.16157023259628012
+    uncalp=0.07765705161421312
+    phiStar =401.28060018764216
+    Mstar= -22.627531793729116
+    
+    """
+    #0.75 < z < 0.80 - 157 clusters
+    zCent=0.775
+    chisq= 13.606641966571088
+    newparams = 20.61501736111111,-2.1888809974747474
+    uncms=0.2307649723165938
+    uncalp=0.10454518513548693
+    phiStar =152.51766217532793
+    Mstar= -22.804322615442803
+    
+    
+    
+    dof = len(obsLF['N'])-2  
+    
+    absR = absMag(zCent, obsLF['mr'])    #changing apparent mags to absolute mags. bins
+    
+    
+    
+    """Plotting"""
+    
+    modelmr=np.linspace(17.0,22.5,100)
+    modelMr = np.linspace(-24.0, -17.0,100)
+    #y = schechterm(newparams,obsLF['mr'])
+    #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+    new_modelN = phiStar*schechterm(newparams,modelmr)
+    
+    fig, ax= plt.subplots()
+    absmr=np.linspace(-23.0,-17.0,100)
+    
+    ax.errorbar(obsLF['mr'], obsLF['N'], yerr=obsLF['Nerr'], fmt='ko', capsize=3)
+    
+    #for mass subsets
+    #ax.errorbar(obsLF['mr'],obsLF['N'],yerr=obsLF['Nerr'], fmt='bo', capsize=3)       #low mass
+    #ax.errorbar(obsLF['mr'],obsLF['N'],yerr=obsLF['Nerr'], fmt='ro', capsize=3)       #high mass
+    
+    ax.plot(modelmr,new_modelN,color='k',ls='-')         #total
+    #ax.plot(modelmr,new_modelN,color='b',ls='--')         #low mass
+    #ax.plot(modelmr,new_modelN,color='r',ls=':')          #high mass
+    ax.set_xlim(16.5,22.5)
+    ax.invert_xaxis()
+    
+    ax2=ax.twiny()
+    #ax2.errorbar(absR, obsLF['N'], yerr=obsLF['Nerr'], color ='#ADFF2F',fmt='v')
+    #ax2.plot(modelMr, Mrnew_modelN, color='#ADFF2F', ls='-')
+    ax2.set_xlim(-23.75, -17.5)
+    #ax2.axvline(x=Mstar, color='y', ls=':')
+    ax2.tick_params(axis='x',which='both',direction='in')
+    ax2.minorticks_on()
+    ax2.set_xlabel(r'$M_r$')
+    ax2.xaxis.label.set_color('#00CED1')   #FF1493 #00CED1 #3CB371
+    ax2.tick_params(axis='x',colors='#00CED1')
+    ax2.spines['top'].set_color('#00CED1')
+    ax2.invert_xaxis()
+    #plt.gca().invert_xaxis()
+    
+    
+    #ax.plot(modelmr,ysmoothed)
+    ax.set_xlabel(r"$m_{r}$")
+    ax.set_ylabel("N")
+    ax.set_title("Composite LF for"+' '+str(numClusters)+' '+"clusters:"+' '+"{:.2f}".format(zLowerlim)+' < z < '+ "{:.2f}".format(zUpperlim), fontsize=10)
+    
+    
+    """for mass LF"""
+    #ax.set_title("Low-mass subset LF for"+' '+str(numClusters)+' '+"clusters:"+' '+"{:.2f}".format(zLowerlim)+' < z <'+ "{:.2f}".format(zUpperlim))
+    #ax.set_title("High-mass subset LF for"+' '+str(numClusters)+' '+"clusters:"+' '+"{:.2f}".format(zLowerlim)+' < z <'+ "{:.2f}".format(zUpperlim))
+    
+    
+    
+    at= AnchoredText(r"$\chi^2={:.2f}$".format(chisq)+'\n'+r"$dof={:.0f}$".format(dof)+'\n'+r"$\phi^* ={:.2f}$".format(phiStar)+'\n'+r"$\alpha ={:.2f}$".format(newparams[1])+r"$\pm$"+"{:.2f}".format(uncalp)+'\n'+r"$m^* ={:.2f}$".format(newparams[0])+r"$\pm$"+"{:.2f}".format(uncms)+'\n'+r"$M^* ={:.2f}$".format(Mstar), prop=dict(size=9), frameon=True, loc=1,)
+    
+    
+    at.patch.set_boxstyle("round,pad=0, rounding_size=0.2")
+    ax.add_artist(at)
+    #ax.legend()
+    ax.tick_params(axis='x',which='both',direction='in')
+    ax.minorticks_on()
+    
+
+    ax.tick_params(axis='y', which='both', direction="in")
+    plt.ylim(ylowerlim, 50000)
+    #plt.xlim(16.5,22.5)
+    plt.semilogy()
+    #plt.gca().invert_xaxis()
+    plt.show()
+    
+    print(">>> Total time: {:.1g} minutes".format((time.time()-start)/60.))
+    
+    
+    print("No. of clusters in bin:", numClusters)
+    print("Redshift interval:","{:.2f}".format(zLowerlim)+' < z <'+ "{:.2f}".format(zUpperlim))
+    #for mass subsets:
+    print("Mass range:", clusterCat['Cluster mass'].min(),'< M200m <',clusterCat['Cluster mass'].max())
+    print("Chi-squared value:",chisq)
+    print("Degrees of freedom:", dof)
+    print("Phistar:",phiStar)
+    print("mstar:",newparams[0])
+    print("Uncertainties in mstar:",uncms)
+    print("alpha:",newparams[1])
+    print("Uncertainties in alpha:",uncalp)
+    print("Mstar:", Mstar)
+    print("Sum of model times phiStar:", np.sum(phiStar*schechterm(newparams,obsLF['mr'])))
+    print("No. of galaxies in observed LF:", np.sum(obsLF['N']))
+    
+    
+    import IPython
+    IPython.embed()
+    sys.exit()
+    
+    
+    
+    
+    
+
+
+

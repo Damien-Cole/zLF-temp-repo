@@ -1,0 +1,781 @@
+#!/usr/bin/env python
+
+"""Schechter function fitting for mass binned composite LFs using Brute force chi-squared min."""
+
+import os
+import sys
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+import astropy.table as atpy
+import astropy.io.fits as pyfits
+from scipy.optimize import fmin
+from astLib import *
+from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
+import time
+import statistics
+
+
+"""Define Schechter function - predicted model"""
+#------------------------------------------------------------------------------------------------------------
+def schechterm(params, magnitude):
+    """Schechter luminosity function by magnitudes."""
+    """params = mstar,alpha, ###phiStar"""
+    
+    mstarMinm = 0.4 *(params[0]- magnitude) 
+    return (0.4 * np.log(10) * (10.0)**(mstarMinm * (params[1] + 1.)) * np.exp(-10.**(mstarMinm)))
+#------------------------------------------------------------------------------------------------------------
+
+
+start=time.time() 
+if __name__ == '__main__':
+    
+    parser = argparse.ArgumentParser("SFMass")
+    parser.add_argument("LFfileName", help="""A .fits table with redshift binned LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("lowMLFfileName", help="""A .fits table with low mass binned LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("highMLFfileName", help="""A .fits table with high mass binned LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("lowMcatalogFileName", help="""A .fits table with cluster details in low mass range. Contains redshift, mass, RA, dec, R200.""")
+    parser.add_argument("highMcatalogFileName", help="""A .fits table with cluster details in high mass range. Contains redshift, mass, RA, dec, R200.""")
+    parser.add_argument("-zLow", dest ="zLowerlim", default= None, type = float, help="""The lower redshift bound for the chosen cluster redshift range """)
+    parser.add_argument("-zUp", dest= "zUpperlim", default=None, type = float, help="""The upper redshift bound for the chosen cluster redshift range  """)
+    parser.add_argument("-numC", dest="numClusters", default=None, type= int, help="""The number of clusters in z bin - use SF-LF title as reference""")
+    parser.add_argument("-ylim", dest="ylowerlim", default=0.5, type=float, help="""Lower y limit for plotting """)
+    
+    #parser.add_argument("-mLow", dest ="mLowerlim", default= None, type = float, help="""The lower mass bound """)
+    #parser.add_argument("-mUp", dest= "mUpperlim", default=None, type = float, help="""The upper mass bound  """)
+    
+    args = parser.parse_args()
+    LFfileName=args.LFfileName
+    lowMLFfileName=args.lowMLFfileName
+    highMLFfileName=args.highMLFfileName
+    catalogFileName=args.catalogFileName
+    lowMcatalogFileName=args.lowMcatalogFileName
+    highMcatalogFileName=args.highMcatalogFileName
+    zLowerlim=args.zLowerlim
+    zUpperlim=args.zUpperlim
+    numClusters=args.numClusters
+    ylowerlim=args.ylowerlim
+    #mLowerlim=args.mLowerlim
+    #mUpperlim=args.mUpperlim
+    
+    obsLF =atpy.Table().read(LFfileName)
+    obsLF2=atpy.Table().read(lowMLFfileName)
+    obsLF3=atpy.Table().read(highMLFfileName)
+    
+    clusterCat= atpy.Table().read(catalogFileName)
+    clusterCat2= atpy.Table().read(lowMcatalogFileName)
+    clusterCat3= atpy.Table().read(highMcatalogFileName)
+    
+    """import IPython
+    IPython.embed()
+    sys.exit()"""
+    
+    if zLowerlim==0.20:
+        
+        #full set - 173 clusters
+        newparams = 18.513454861111118, -1.1764125631313131
+        uncms=0.0193095441398325
+        uncalp=0.005497942837909839
+        phiStar = 4280.678716987008
+       
+        modelmr=np.linspace(17.0,22.5,1000)
+       
+        y = schechterm(newparams,obsLF['mr'])
+        #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+        new_modelN = phiStar*schechterm(newparams,modelmr) 
+       
+        #low subset - 47 clusters
+        newparams2 =18.51866319444445, -1.1811474116161613
+        uncms2=0.04785959564248075
+        uncalp2= 0.013463327479513048
+        phiStar2= 805.0577542063285
+        y2 =schechterm(newparams2,obsLF2['mr'])
+        #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+        new_modelN2 = phiStar2*schechterm(newparams2,modelmr)      
+       
+        #high subset - 37 clusters
+        newparams3=18.482204861111107, -1.1547111742424243
+        uncms3= 0.03077602144288097
+        uncalp3= 0.008727938253113432
+        phiStar3= 1518.3470101369924
+        y3 =schechterm(newparams3,obsLF3['mr'])
+        #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+        new_modelN3 = phiStar3*schechterm(newparams3,modelmr)      
+       
+        """calculating Mstar for comparison plots"""
+        zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+        DA = astCalc.da(zCent)                      #Angular diameter distance
+        DL = astCalc.dl(zCent)                      #Luminosity distance
+        dm= 5*(np.log10(DL*1e5))                    #distance modulus
+       
+        Mstar = newparams[0]-dm 
+        Mstar2 = newparams2[0]-dm
+        Mstar3 = newparams3[0]-dm 
+    
+        dof = len(obsLF['N'])-2                     #degrees of freedom  
+        dof2 = len(obsLF2['N'])-2                   #degrees of freedom  
+        dof3 = len(obsLF3['N'])-2                   #degrees of freedom  
+        
+    
+    if zLowerlim == 0.25:
+        
+        #full set - 225 clusters
+        newparams = 18.910156249999996, -1.1803582702020203
+        uncms=0.02024558271624667
+        uncalp=0.006505689368338636
+        phiStar = 5173.346801010524
+       
+        modelmr=np.linspace(17.0,22.5,1000)
+       
+        y = schechterm(newparams,obsLF['mr'])
+        #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+        new_modelN = phiStar*schechterm(newparams,modelmr) 
+       
+        #low subset - 60 clusters
+        newparams2 =18.914496527777782, -1.1823311237373737
+        uncms2=0.05094662897253457
+        uncalp2= 0.016162768578142122
+        phiStar2= 953.5631554570522
+        y2 =schechterm(newparams2,obsLF2['mr'])
+        #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+        new_modelN2 = phiStar2*schechterm(newparams2,modelmr)      
+       
+        #high subset - 52 clusters
+        newparams3=18.96571180555555, -1.1298532196969697
+        uncms3= 0.033553075927557754
+        uncalp3= 0.011300002209650417
+        phiStar3= 1971.3692545235858
+        y3 =schechterm(newparams3,obsLF3['mr'])
+        #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+        new_modelN3 = phiStar3*schechterm(newparams3,modelmr)      
+       
+        """calculating Mstar for comparison plots"""
+        zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+        DA = astCalc.da(zCent)                      #Angular diameter distance
+        DL = astCalc.dl(zCent)                      #Luminosity distance
+        dm= 5*(np.log10(DL*1e5))                    #distance modulus
+       
+        Mstar = newparams[0]-dm 
+        Mstar2 = newparams2[0]-dm
+        Mstar3 = newparams3[0]-dm 
+    
+        dof = len(obsLF['N'])-2                     #degrees of freedom  
+        dof2 = len(obsLF2['N'])-2                   #degrees of freedom  
+        dof3 = len(obsLF3['N'])-2                   #degrees of freedom  
+        
+    
+    
+    if zLowerlim == 0.30:
+        
+        #full set - 273 clusters
+        newparams = 19.102864583333336, -1.3054371843434347
+        uncms=0.03422526062307124
+        uncalp=0.009809989429282613
+        phiStar = 3370.3286052581598
+       
+        modelmr=np.linspace(17.0,22.5,1000)
+       
+        y = schechterm(newparams,obsLF['mr'])
+        #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+        new_modelN = phiStar*schechterm(newparams,modelmr) 
+       
+        #low subset - 72 clusters
+        newparams2 =19.102864583333336, -1.294783775252525
+        uncms2= 0.07688074580629307
+        uncalp2= 0.02208243802643884
+        phiStar2= 650.2812163976082
+        y2 =schechterm(newparams2,obsLF2['mr'])
+        #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+        new_modelN2 = phiStar2*schechterm(newparams2,modelmr)      
+       
+        #high subset - 62 clusters
+        newparams3=19.20529513888889, -1.2600615530303028
+        uncms3= 0.05774157205800255
+        uncalp3= 0.018441173360265028
+        phiStar3= 1263.7929658527603
+        y3 =schechterm(newparams3,obsLF3['mr'])
+        #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+        new_modelN3 = phiStar3*schechterm(newparams3,modelmr)      
+       
+        """calculating Mstar for comparison plots"""
+        zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+        DA = astCalc.da(zCent)                      #Angular diameter distance
+        DL = astCalc.dl(zCent)                      #Luminosity distance
+        dm= 5*(np.log10(DL*1e5))                    #distance modulus
+       
+        Mstar = newparams[0]-dm 
+        Mstar2 = newparams2[0]-dm
+        Mstar3 = newparams3[0]-dm 
+    
+        dof = len(obsLF['N'])-2                     #degrees of freedom  
+        dof2 = len(obsLF2['N'])-2                   #degrees of freedom  
+        dof3 = len(obsLF3['N'])-2                   #degrees of freedom  
+        
+        
+    
+    if zLowerlim == 0.35:
+        
+        
+        #full set - 272 clusters
+        newparams = 19.395399305555557, -1.3259548611111112
+        uncms=0.04139406914320196
+        uncalp=0.014512557210657301
+        phiStar = 3069.232718383244
+       
+        modelmr=np.linspace(17.0,22.5,1000)
+       
+        y = schechterm(newparams,obsLF['mr'])
+        #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+        new_modelN = phiStar*schechterm(newparams,modelmr) 
+       
+        #low subset - 70 clusters
+        newparams2 =19.424913194444443, -1.2900489267676765
+        uncms2= 0.08326731499530789
+        uncalp2= 0.028033124754775735
+        phiStar2= 594.0768780941121
+        y2 =schechterm(newparams2,obsLF2['mr'])
+        #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+        new_modelN2 = phiStar2*schechterm(newparams2,modelmr)      
+       
+        #high subset - 65 clusters
+        newparams3=19.621961805555557, -1.2470407196969697
+        uncms3= 0.0578105607821971
+        uncalp3= 0.026039427916735382
+        phiStar3= 1426.3215664769261
+        y3 =schechterm(newparams3,obsLF3['mr'])
+        #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+        new_modelN3 = phiStar3*schechterm(newparams3,modelmr)      
+       
+        """calculating Mstar for comparison plots"""
+        zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+        DA = astCalc.da(zCent)                      #Angular diameter distance
+        DL = astCalc.dl(zCent)                      #Luminosity distance
+        dm= 5*(np.log10(DL*1e5))                    #distance modulus
+       
+        Mstar = newparams[0]-dm 
+        Mstar2 = newparams2[0]-dm
+        Mstar3 = newparams3[0]-dm 
+    
+        dof = len(obsLF['N'])-2                     #degrees of freedom  
+        dof2 = len(obsLF2['N'])-2                   #degrees of freedom  
+        dof3 = len(obsLF3['N'])-2                   #degrees of freedom
+        
+        
+    if zLowerlim == 0.40:
+        
+        #full set - 338 clusters
+        newparams = 19.96050347222222, -1.1862768308080809
+        uncms=0.0338111193552135
+        uncalp=0.014905654626091142
+        phiStar = 5201.185320750921
+       
+        modelmr=np.linspace(17.0,22.5,1000)
+       
+        y = schechterm(newparams,obsLF['mr'])
+        #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+        new_modelN = phiStar*schechterm(newparams,modelmr) 
+       
+        #low subset - 89 clusters
+        newparams2 =19.889322916666664, -1.2273121843434347
+        uncms2= 0.09062791174747084
+        uncalp2= 0.036824568037253494
+        phiStar2= 846.1788697408082
+        y2 =schechterm(newparams2,obsLF2['mr'])
+        #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+        new_modelN2 = phiStar2*schechterm(newparams2,modelmr)      
+       
+        #high subset - 77 clusters
+        newparams3=20.069010416666668, -1.105389835858586
+        uncms3= 0.04684861106961394
+        uncalp3= 0.02404498931867283
+        phiStar3= 2151.533830683605
+        y3 =schechterm(newparams3,obsLF3['mr'])
+        #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+        new_modelN3 = phiStar3*schechterm(newparams3,modelmr)      
+       
+        """calculating Mstar for comparison plots"""
+        zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+        DA = astCalc.da(zCent)                      #Angular diameter distance
+        DL = astCalc.dl(zCent)                      #Luminosity distance
+        dm= 5*(np.log10(DL*1e5))                    #distance modulus
+       
+        Mstar = newparams[0]-dm 
+        Mstar2 = newparams2[0]-dm
+        Mstar3 = newparams3[0]-dm 
+    
+        dof = len(obsLF['N'])-2                     #degrees of freedom  
+        dof2 = len(obsLF2['N'])-2                   #degrees of freedom  
+        dof3 = len(obsLF3['N'])-2                   #degrees of freedom
+        
+        
+        
+    
+    if zLowerlim == 0.45:
+        
+        #full set - 294 clusters
+        newparams = 20.189670138888886, -1.2131076388888888
+        uncms=0.04708823170295571
+        uncalp=0.02264531845511133
+        phiStar = 3936.870254656553
+       
+        modelmr=np.linspace(17.0,22.5,1000)
+       
+        y = schechterm(newparams,obsLF['mr'])
+        #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+        new_modelN = phiStar*schechterm(newparams,modelmr) 
+       
+        #low subset - 75 clusters
+        newparams2 =20.03428819444445, -1.2987294823232325
+        uncms2= 0.12164732847079954
+        uncalp2= 0.050782903109387205
+        phiStar2= 576.1446935493698
+        y2 =schechterm(newparams2,obsLF2['mr'])
+        #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+        new_modelN2 = phiStar2*schechterm(newparams2,modelmr)      
+       
+        #high subset - 71 clusters
+        newparams3=20.311197916666668, -1.1247238005050504
+        uncms3=0.06940756524543487
+        uncalp3= 0.03674597383234895
+        phiStar3= 1544.527259269288
+        y3 =schechterm(newparams3,obsLF3['mr'])
+        #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+        new_modelN3 = phiStar3*schechterm(newparams3,modelmr)      
+       
+        """calculating Mstar for comparison plots"""
+        zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+        DA = astCalc.da(zCent)                      #Angular diameter distance
+        DL = astCalc.dl(zCent)                      #Luminosity distance
+        dm= 5*(np.log10(DL*1e5))                    #distance modulus
+       
+        Mstar = newparams[0]-dm 
+        Mstar2 = newparams2[0]-dm
+        Mstar3 = newparams3[0]-dm 
+    
+        dof = len(obsLF['N'])-2                     #degrees of freedom  
+        dof2 = len(obsLF2['N'])-2                   #degrees of freedom  
+        dof3 = len(obsLF3['N'])-2                   #degrees of freedom
+        
+        
+        
+    if zLowerlim==0.50:
+        
+        #full set - 302 clusters
+        newparams = 20.52387152777778,-1.2012705176767677 
+        uncms=0.0580538993148985
+        uncalp=0.031797670212636055
+        phiStar =4258.186544903768
+       
+        modelmr=np.linspace(17.0,22.5,1000)
+       
+        y = schechterm(newparams,obsLF['mr'])
+        #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+        new_modelN = phiStar*schechterm(newparams,modelmr) 
+       
+        #low subset - 78 clusters
+        newparams2 =20.36501736111111, -1.3093828914141412
+        uncms2= 0.14185899060727764
+        uncalp2= 0.06770956118209284
+        phiStar2= 633.0335609907359
+        y2 =schechterm(newparams2,obsLF2['mr'])
+        #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+        new_modelN2 = phiStar2*schechterm(newparams2,modelmr)      
+       
+        #high subset - 73 clusters
+        newparams3=20.67317708333334, -1.0876341540404042
+        uncms3=0.08751018528131821
+        uncalp3= 0.054169411747786195
+        phiStar3= 1711.119707158935
+        y3 =schechterm(newparams3,obsLF3['mr'])
+        #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+        new_modelN3 = phiStar3*schechterm(newparams3,modelmr)      
+       
+        """calculating Mstar for comparison plots"""
+        zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+        DA = astCalc.da(zCent)                      #Angular diameter distance
+        DL = astCalc.dl(zCent)                      #Luminosity distance
+        dm= 5*(np.log10(DL*1e5))                    #distance modulus
+       
+        Mstar = newparams[0]-dm 
+        Mstar2 = newparams2[0]-dm
+        Mstar3 = newparams3[0]-dm 
+    
+        dof = len(obsLF['N'])-2                     #degrees of freedom  
+        dof2 = len(obsLF2['N'])-2                   #degrees of freedom  
+        dof3 = len(obsLF3['N'])-2                   #degrees of freedom
+        
+        
+        
+    if zLowerlim == 0.55:
+        
+        #full set - 262 clusters
+        newparams = 20.63411458333333, -1.3283222853535355
+        uncms=0.0843400549518392
+        uncalp=0.046851157375204226
+        phiStar =2975.7153327112355
+       
+        modelmr=np.linspace(17.0,22.5,1000)
+       
+        y = schechterm(newparams,obsLF['mr'])
+        #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+        new_modelN = phiStar*schechterm(newparams,modelmr) 
+       
+        #low subset - 66 clusters
+        newparams2 =20.267795138888886, -1.4739188762626263
+        uncms2= 0.2710191678465705
+        uncalp2= 0.11390826467524261
+        phiStar2= 368.9653123750375
+        y2 =schechterm(newparams2,obsLF2['mr'])
+        #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+        new_modelN2 = phiStar2*schechterm(newparams2,modelmr)      
+       
+        #high subset - 62 clusters
+        newparams3= 20.84765625, -1.1799636994949492
+        uncms3=0.10624111100877412
+        uncalp3= 0.06947121337252149
+        phiStar3= 1328.523671704842
+        y3 =schechterm(newparams3,obsLF3['mr'])
+        #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+        new_modelN3 = phiStar3*schechterm(newparams3,modelmr)      
+       
+        """calculating Mstar for comparison plots"""
+        zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+        DA = astCalc.da(zCent)                      #Angular diameter distance
+        DL = astCalc.dl(zCent)                      #Luminosity distance
+        dm= 5*(np.log10(DL*1e5))                    #distance modulus
+       
+        Mstar = newparams[0]-dm 
+        Mstar2 = newparams2[0]-dm
+        Mstar3 = newparams3[0]-dm 
+    
+        dof = len(obsLF['N'])-2                     #degrees of freedom  
+        dof2 = len(obsLF2['N'])-2                   #degrees of freedom  
+        dof3 = len(obsLF3['N'])-2                   #degrees of freedom
+        
+        
+    if zLowerlim== 0.60:
+        
+        
+        #full set - 286 clusters
+        newparams = 20.62977430555556, -1.504695391414141
+        uncms=0.10207905626536393
+        uncalp=0.052611313260444784
+        phiStar =2063.4306499324325
+       
+        modelmr=np.linspace(17.0,22.5,1000)
+       
+        y = schechterm(newparams,obsLF['mr'])
+        #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+        new_modelN = phiStar*schechterm(newparams,modelmr) 
+       
+        #low subset - 73 clusters
+        newparams2 =20.305989583333332, -1.6230666035353534
+        uncms2= 0.15666263759954294
+        uncalp2= 0.06775124947483892
+        phiStar2= 256.8398821710485
+        y2 =schechterm(newparams2,obsLF2['mr'])
+        #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+        new_modelN2 = phiStar2*schechterm(newparams2,modelmr)      
+       
+        #high subset - 65 clusters
+        newparams3= 20.682725694444443, -1.494041982323232
+        uncms3=0.15952145258363917
+        uncalp3= 0.08686312828264443
+        phiStar3= 715.505060410349
+        y3 =schechterm(newparams3,obsLF3['mr'])
+        #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+        new_modelN3 = phiStar3*schechterm(newparams3,modelmr)      
+       
+        """calculating Mstar for comparison plots"""
+        zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+        DA = astCalc.da(zCent)                      #Angular diameter distance
+        DL = astCalc.dl(zCent)                      #Luminosity distance
+        dm= 5*(np.log10(DL*1e5))                    #distance modulus
+       
+        Mstar = newparams[0]-dm 
+        Mstar2 = newparams2[0]-dm
+        Mstar3 = newparams3[0]-dm 
+    
+        dof = len(obsLF['N'])-2                     #degrees of freedom  
+        dof2 = len(obsLF2['N'])-2                   #degrees of freedom  
+        dof3 = len(obsLF3['N'])-2                   #degrees of freedom
+        
+        
+        
+        
+    if zLowerlim==0.65:
+        
+        #full set - 227 clusters
+        newparams = 20.558593750000007, -1.7150015782828283
+        uncms=0.12719808263334031
+        uncalp=0.06093432730730609
+        phiStar =832.3364775748565
+       
+        modelmr=np.linspace(17.0,22.5,1000)
+       
+        y = schechterm(newparams,obsLF['mr'])
+        #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+        new_modelN = phiStar*schechterm(newparams,modelmr) 
+       
+        #low subset - 58 clusters
+        newparams2 =20.850260416666668, -1.6262231691919193
+        uncms2= 0.25211903502421645
+        uncalp2= 0.15172295331434468
+        phiStar2= 241.69313239854284
+        y2 =schechterm(newparams2,obsLF2['mr'])
+        #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+        new_modelN2 = phiStar2*schechterm(newparams2,modelmr)      
+       
+        #high subset - 54 clusters
+        newparams3=  20.60199652777778, -1.7146070075757573
+        uncms3=0.22684208916052923
+        uncalp3= 0.11266866593839572
+        phiStar3= 281.9123782166213
+        y3 =schechterm(newparams3,obsLF3['mr'])
+        #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+        new_modelN3 = phiStar3*schechterm(newparams3,modelmr)      
+       
+        """calculating Mstar for comparison plots"""
+        zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+        DA = astCalc.da(zCent)                      #Angular diameter distance
+        DL = astCalc.dl(zCent)                      #Luminosity distance
+        dm= 5*(np.log10(DL*1e5))                    #distance modulus
+       
+        Mstar = newparams[0]-dm 
+        Mstar2 = newparams2[0]-dm
+        Mstar3 = newparams3[0]-dm 
+    
+        dof = len(obsLF['N'])-2                     #degrees of freedom  
+        dof2 = len(obsLF2['N'])-2                   #degrees of freedom  
+        dof3 = len(obsLF3['N'])-2                   #degrees of freedom
+        
+        
+        
+    if zLowerlim==0.70:
+        
+        #full set - 199 clusters
+        newparams = 20.61414930555556, -1.9418797348484849
+        uncms=0.16157023259628012
+        uncalp=0.07765705161421312
+        phiStar =401.28060018764216
+       
+        modelmr=np.linspace(17.0,22.5,1000)
+       
+        y = schechterm(newparams,obsLF['mr'])
+        #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+        new_modelN = phiStar*schechterm(newparams,modelmr) 
+       
+        #low subset - 50 clusters
+        newparams2 =21.19835069444444, -1.6356928661616157
+        uncms2= 0.2983471990216071
+        uncalp2= 0.2161558746721275
+        phiStar2= 193.37391344000574
+        y2 =schechterm(newparams2,obsLF2['mr'])
+        #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+        new_modelN2 = phiStar2*schechterm(newparams2,modelmr)      
+       
+        #high subset - 46 clusters
+        newparams3=  20.368489583333332, -2.0705097853535355
+        uncms3= 0.25100746689680803
+        uncalp3= 0.10095127628561382
+        phiStar3= 79.99036668301139
+        y3 =schechterm(newparams3,obsLF3['mr'])
+        #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+        new_modelN3 = phiStar3*schechterm(newparams3,modelmr)      
+       
+        """calculating Mstar for comparison plots"""
+        zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+        DA = astCalc.da(zCent)                      #Angular diameter distance
+        DL = astCalc.dl(zCent)                      #Luminosity distance
+        dm= 5*(np.log10(DL*1e5))                    #distance modulus
+       
+        Mstar = newparams[0]-dm 
+        Mstar2 = newparams2[0]-dm
+        Mstar3 = newparams3[0]-dm 
+    
+        dof = len(obsLF['N'])-2                     #degrees of freedom  
+        dof2 = len(obsLF2['N'])-2                   #degrees of freedom  
+        dof3 = len(obsLF3['N'])-2                   #degrees of freedom
+        
+        
+        
+        
+        
+    if zLowerlim==0.75:
+        
+        #full set - 157 clusters
+        newparams = 20.61501736111111,-2.1888809974747474
+        uncms=0.2307649723165938
+        uncalp=0.10454518513548693
+        phiStar =152.51766217532793
+       
+        modelmr=np.linspace(17.0,22.5,1000)
+       
+        y = schechterm(newparams,obsLF['mr'])
+        #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+        new_modelN = phiStar*schechterm(newparams,modelmr) 
+       
+        #low subset - 40 clusters
+        newparams2 =20.139322916666664, -2.3577572601010104
+        uncms2= 1.8222463114937244
+        uncalp2= 0.8264346996044104
+        phiStar2= 11.651981872123434
+        y2 =schechterm(newparams2,obsLF2['mr'])
+        #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+        new_modelN2 = phiStar2*schechterm(newparams2,modelmr)      
+       
+        #high subset - 37 clusters
+        newparams3=  21.13585069444444, -2.053543244949495
+        uncms3= 0.5531022490220626
+        uncalp3= 0.2957681594336112
+        phiStar3= 118.2013965441235
+        y3 =schechterm(newparams3,obsLF3['mr'])
+        #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+        new_modelN3 = phiStar3*schechterm(newparams3,modelmr)      
+       
+        """calculating Mstar for comparison plots"""
+        zCent = (zLowerlim+zUpperlim)/2             #redshift to which we k-corr. (i.e. median of redshift interval)
+        DA = astCalc.da(zCent)                      #Angular diameter distance
+        DL = astCalc.dl(zCent)                      #Luminosity distance
+        dm= 5*(np.log10(DL*1e5))                    #distance modulus
+       
+        Mstar = newparams[0]-dm 
+        Mstar2 = newparams2[0]-dm
+        Mstar3 = newparams3[0]-dm 
+    
+        dof = len(obsLF['N'])-2                     #degrees of freedom  
+        dof2 = len(obsLF2['N'])-2                   #degrees of freedom  
+        dof3 = len(obsLF3['N'])-2                   #degrees of freedom
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+      
+        
+    
+    
+    
+    
+    
+
+   
+
+    #plt.plot(alpha,prob_alpha)
+    #peak of prob distribution gives mstar and alpha
+    
+    
+    
+    
+    """fitting schechter model"""
+    
+    
+    fig, ax= plt.subplots()
+    ax.errorbar(obsLF['mr'], obsLF['N'], yerr=obsLF['Nerr'], fmt='ko', capsize=3)
+    ax.errorbar(obsLF2['mr'],obsLF2['N'],yerr=obsLF2['Nerr'], fmt='bo', capsize=3)
+    ax.errorbar(obsLF3['mr'],obsLF3['N'],yerr=obsLF3['Nerr'], fmt='ro', capsize=3)
+    
+    ax.plot(modelmr,new_modelN,color='k',ls='-',label='total z bin:'+'\n'+r"$\alpha ={:.2f}$".format(newparams[1])+r"$\pm$"+"{:.2f}".format(uncalp)+'\n'+r"$m^* ={:.2f}$".format(newparams[0])+r"$\pm$"+"{:.2f}".format(uncms))
+    
+    ax.plot(modelmr,new_modelN2,color='b',ls='--',label='low mass:'+"{:.2f}".format(clusterCat2['Cluster mass'].min())+r'$\leq$'+' '+r"$M_{200m}$"+'/'+r"$10^{14} M_\odot$"+' '+r'$\leq$'+"{:.2f}".format(clusterCat2['Cluster mass'].max())+':'+'\n'+r"$\alpha ={:.2f}$".format(newparams2[1])+r"$\pm$"+"{:.2f}".format(uncalp2)+'\n'+r"$m^* ={:.2f}$".format(newparams2[0])+r"$\pm$"+"{:.2f}".format(uncms2))
+            
+    ax.plot(modelmr,new_modelN3,color='r',ls=':',label='high mass:'+"{:.2f}".format(clusterCat3['Cluster mass'].min())+r'$\leq$'+' '+r"$M_{200m}$" +'/'+r"$10^{14} M_\odot$"+' '+r'$\leq$'+"{:.2f}".format(clusterCat3['Cluster mass'].max())+':'+'\n'+r"$\alpha ={:.2f}$".format(newparams3[1])+r"$\pm$"+"{:.2f}".format(uncalp3)+'\n'+r"$m^* ={:.2f}$".format(newparams3[0])+r"$\pm$"+"{:.2f}".format(uncms3))
+    
+
+    ax.legend(prop={'size': 6})
+    ax.set_xlabel(r"$m_{r}$")
+    ax.set_ylabel("N")
+    ax.set_title("Mass binned LF:"+' '+"{:.2f}".format(zLowerlim)+' < z < '+ "{:.2f}".format(zUpperlim), fontsize=10)
+    """for mass LF"""
+    #ax.set_title("Composite LF:"+str(mLowerlim)+r' < $M_{200m}$ <'+ str(mUpperlim))
+    
+    #at= AnchoredText(r"$\chi^2={:.2f}$".format(chisq.min())+'\n'+r"$dof={:.2f}$".format(dof)+'\n'+r"$\phi^* ={:.2f}$".format(phiStar)+'\n'+r"$\alpha ={:.2f}$".format(alpha[j])+r"$\pm$"+str(round(uncalp,5))+'\n'+r"$m^* ={:.2f}$".format(mstar[i])+r"$\pm$"+str(round(uncms,5))+'\n'+r"$M^* ={:.2f}$".format(Mstar), prop=dict(size=6), frameon=True, loc=1,)
+    
+    #at.patch.set_boxstyle("round,pad=0, rounding_size=0.2")
+    #ax.add_artist(at)
+    #ax.legend()
+    
+    ax.tick_params(axis='x',which='both',direction='in')
+    ax.minorticks_on()
+    ax.tick_params(axis='y', which='both', direction="in")
+    ax.set_xlim(16.5,22.5)
+    ax.invert_xaxis()
+    
+    ax2=ax.twiny()
+    #ax2.errorbar(absR, obsLF['N'], yerr=obsLF['Nerr'], color ='#ADFF2F',fmt='v')
+    #ax2.plot(modelMr, Mrnew_modelN, color='#ADFF2F', ls='-')
+    ax2.set_xlim(-23.75, -17.5)
+    #ax2.axvline(x=Mstar, color='y', ls=':')
+    ax2.tick_params(axis='x',which='both',direction='in')
+    ax2.minorticks_on()
+    ax2.set_xlabel(r'$M_r$')
+    ax2.xaxis.label.set_color('#00CED1')   #FF1493 #00CED1 #3CB371
+    ax2.tick_params(axis='x',colors='#00CED1')
+    ax2.spines['top'].set_color('#00CED1')
+    ax2.invert_xaxis()
+    
+    plt.ylim(ylowerlim, 50000)
+    #plt.xlim(16.5,22.5)
+    plt.semilogy()
+    plt.show()
+    
+    
+    
+    print(">>> Total time: {:.1g} minutes".format((time.time()-start)/60.))
+    
+    #print("Chi-squared value:",chisqfit.min())
+    print("Full set details")
+    print("Redshift interval:","{:.2f}".format(zLowerlim)+' < z <'+ "{:.2f}".format(zUpperlim))
+    print("No. of clusters in bin:", len(clusterCat))
+    print("Phistar:",phiStar)
+    print("mstar:",newparams[0])
+    print("alpha:",newparams[1])
+    print("Mstar:", Mstar)
+    print("Sum of model times phiStar:", np.sum(phiStar*schechterm(newparams,obsLF['mr'])))
+    print("No. of galaxies in observed LF:", np.sum(obsLF['N']))
+    
+    print("low mass subset details")
+    print("No. of clusters in bin:", len(clusterCat2))
+    print("Mass range:", clusterCat2['Cluster mass'].min(),'< M200m <',clusterCat2['Cluster mass'].max())
+    #print("Chi-squared value:",chisqfit2.min())
+    print("Phistar:",phiStar2)
+    print("mstar:",newparams2[0])
+    print("alpha:",newparams2[1])
+    print("Mstar:", Mstar2)
+    print("Sum of model times phiStar:", np.sum(phiStar2*schechterm(newparams2,obsLF2['mr'])))
+    print("No. of galaxies in observed LF:", np.sum(obsLF2['N']))
+    
+    print("high mass subset details")
+    print("No. of clusters in bin:", len(clusterCat3))
+    print("Mass range:", clusterCat3['Cluster mass'].min(),'< M200m <',clusterCat3['Cluster mass'].max())
+    #print("Chi-squared value:",chisqfit3.min())
+    print("Phistar:",phiStar3)
+    print("mstar:",newparams3[0])
+    print("alpha:",newparams3[1])
+    print("Mstar:", Mstar3)
+    print("Sum of model times phiStar:", np.sum(phiStar3*schechterm(newparams3,obsLF3['mr'])))
+    print("No. of galaxies in observed LF:", np.sum(obsLF3['N']))
+    
+    
+    
+    
+    
+    import IPython
+    IPython.embed()
+    sys.exit()
+    
+    
+    

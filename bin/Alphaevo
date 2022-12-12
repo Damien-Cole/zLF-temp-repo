@@ -1,0 +1,240 @@
+#!/usr/bin/env python
+
+#Shows evolution of faint-end slope alpha*
+
+from astLib import *
+import numpy as np
+import pylab
+import matplotlib.pyplot as plt
+
+
+
+"""Our work"""
+
+
+#Full set
+zCents= [0.225, 0.275, 0.325, 0.375, 0.425, 0.475, 0.525, 0.575, 0.625, 0.675, 0.725, 0.775]
+
+
+alpha=[-1.1764125631313131, -1.1803582702020203, -1.3054371843434347, -1.3259548611111112, -1.1862768308080809, -1.2131076388888888, -1.2012705176767677, -1.3283222853535355, -1.504695391414141, -1.7150015782828283,  -1.9418797348484849, -2.1888809974747474]
+
+uncert= [0.005497942837909839, 0.006505689368338636, 0.009809989429282613, 0.014512557210657301, 0.014905654626091142, 0.02264531845511133, 0.031797670212636055, 0.046851157375204226, 0.052611313260444784, 0.06093432730730609, 0.07765705161421312, 0.10454518513548693]
+
+
+#Low-mass
+low_alpha=[-1.1811474116161613, -1.1823311237373737, -1.294783775252525, -1.2900489267676765, -1.2273121843434347, -1.2987294823232325, -1.3093828914141412, -1.4739188762626263, -1.6230666035353534, -1.6262231691919193, -1.6356928661616157, -2.3577572601010104]
+low_uncalp= [0.013463327479513048, 0.016162768578142122, 0.02208243802643884, 0.028033124754775735, 0.036824568037253494, 0.050782903109387205, 0.06770956118209284, 0.11390826467524261, 0.06775124947483892, 0.15172295331434468, 0.2161558746721275, 0.8264346996044104]
+
+#high-mass
+high_alpha=[-1.1547111742424243, -1.1298532196969697, -1.2600615530303028, -1.2470407196969697, -1.105389835858586, -1.1247238005050504, -1.0876341540404042, -1.1799636994949492, -1.494041982323232, -1.7146070075757573, -2.0705097853535355, -2.053543244949495]
+high_uncalp=[0.008727938253113432, 0.011300002209650417, 0.018441173360265028, 0.026039427916735382, 0.02404498931867283, 0.03674597383234895, 0.054169411747786195, 0.06947121337252149, 0.08686312828264443, 0.11266866593839572, 0.10095127628561382, 0.2957681594336112]
+
+
+
+#Previous work
+
+"""
+#Garilli1999 - 65 clusters
+#r-band
+Ga_zCent=0.15
+Gar_alpha=-0.95
+Gar_uncert=0.07
+
+#g-band
+Gag_alpha=-0.94
+Gag_uncert=0.07
+
+
+#Goto2002 - 0.02 < z < 0.25 for 204 clusters
+#r-band
+Gr_zCent=0.1
+Gr_alpha= -0.85
+Gr_uncert=0.03
+
+#Blanton2003
+B_zCent=0.1
+
+#u-band
+Bu_alpha=-0.92
+Bu_uncert=0.07
+#g-band
+Bg_alpha=-0.89
+Bg_uncert=0.03
+#r-band
+Br_alpha=-1.05
+Br_uncert=0.01
+#i-band
+Bi_alpha=-1.00
+Bi_uncert=0.02
+#z-band
+Bz_alpha=-1.08
+Bz_uncert=0.02
+
+
+#Popesso2004 - z<0.25 for 97 clusters
+#all bands - bright-end
+P_zCent=0.1
+P_alpha= -1.25
+
+"""
+
+
+#Popesso2006 - 69 clusters (just taking total r-band LF)
+P_zCent=0.1
+#All galaxies in R200
+#Schechter+Exponential
+PSE_alpha=-1.26
+PSE_uncert=0.12
+#late-type galaxies
+Pl_alpha=-1.87
+Pl_uncert=0.04
+
+
+#Hansen2009
+H_zCent=0.25
+H_alpha=-0.28
+H_uncert=0.06
+
+
+#Montero-Dorta&Prada2009
+M_zCent=0.1
+#r-band
+Mr_alpha=-1.26
+Mr_uncert=0.02
+
+
+#Loveday2011
+L_zCent=0.1
+#r-band
+Lr_alpha=-1.26
+Lr_uncert=0.02
+
+
+
+#Zhang2019 - z-band
+#0.1<z<0.4 for 64 clusters
+Z1_zCent=0.25
+Z1_alpha= -0.80
+Z1_uncert=0.12
+
+#0.4<z<1.05 for 27 clusters
+Z2_zCent=0.49
+Z2_alpha= -0.55
+Z2_uncert=0.18
+
+
+#Puddu2021 - 4098 clusters in r-band KiDSDDR3 (Use SDSS)
+Pud1_zCent = 0.24
+Pud1_alpha= -1.04
+Pud1_uncert=0.03
+
+Pud2_zCent= 0.41
+Pud2_alpha = -0.92
+Pud2_uncert=0.05
+
+Pud3_zCent= 0.50
+Pud3_alpha= -0.87
+Pud3_uncert= 0.07
+
+Pud4_zCent= 0.63
+Pud4_alpha= -0.63
+Pud4_uncert= 0.11
+
+
+
+
+fig, ax= plt.subplots()
+
+
+ax.errorbar(zCents, alpha, yerr=uncert, fmt='ks', capsize=4)
+ax.plot(zCents, alpha, 'ks', label='This work: All')
+
+ax.errorbar(zCents, low_alpha, yerr=low_uncalp, fmt='b^', capsize=4)
+ax.plot(zCents, low_alpha, 'b^', label='This work: low-mass')
+
+ax.errorbar(zCents, high_alpha, yerr=high_uncalp, fmt='r^', capsize=4)
+ax.plot(zCents, high_alpha, 'r^', label='This work: high-mass')
+
+
+"""
+ax.errorbar(Ga_zCent, Gar_alpha, yerr=Gar_uncert, fmt='go', capsize=4)
+ax.plot(Ga_zCent, Gar_alpha, 'go', label='Garilli1999')
+ax.errorbar(Ga_zCent, Gag_alpha, yerr=Gag_uncert, fmt='go', capsize=4)
+ax.plot(Ga_zCent, Gag_alpha, 'go')
+
+ax.errorbar(Gr_zCent, Gr_alpha, yerr=Gr_uncert, fmt='co', capsize=4)
+ax.plot(Gr_zCent, Gr_alpha, 'co', label='Goto2002')
+
+
+ax.errorbar(B_zCent, Bu_alpha, yerr=Bu_uncert, fmt='ro', capsize=4)
+ax.plot(B_zCent, Bu_alpha, 'ro', label='Blanton2003')
+ax.errorbar(B_zCent, Bg_alpha, yerr=Bg_uncert, fmt='ro', capsize=4)
+ax.plot(B_zCent, Bg_alpha, 'ro')
+ax.errorbar(B_zCent, Br_alpha, yerr=Br_uncert, fmt='ro', capsize=4)
+ax.plot(B_zCent, Br_alpha, 'ro')
+ax.errorbar(B_zCent, Bi_alpha, yerr=Bi_uncert, fmt='ro', capsize=4)
+ax.plot(B_zCent, Bi_alpha, 'ro')
+ax.errorbar(B_zCent, Bz_alpha, yerr=Bz_uncert, fmt='ro', capsize=4)
+ax.plot(B_zCent, Bz_alpha, 'ro')
+
+ax.errorbar(M_zCent, Mu_alpha, yerr=Mu_uncert, fmt='yo', capsize=4)
+ax.plot(M_zCent, Mu_alpha, 'co', label='Montero-Dorta&Prada2009')
+ax.errorbar(M_zCent, Mg_alpha, yerr=Mg_uncert, fmt='co', capsize=4)
+ax.plot(M_zCent, Mg_alpha, 'co')
+ax.errorbar(M_zCent, Mr_alpha, yerr=Mr_uncert, fmt='co', capsize=4)
+ax.plot(M_zCent, Mr_alpha, 'co')
+ax.errorbar(M_zCent, Mi_alpha, yerr=Mi_uncert, fmt='co', capsize=4)
+ax.plot(M_zCent, Mi_alpha, 'co')
+ax.errorbar(M_zCent, Mz_alpha, yerr=Mz_uncert, fmt='co', capsize=4)
+ax.plot(M_zCent, Mz_alpha, 'co')
+"""
+ax.errorbar(P_zCent, PSE_alpha, yerr=PSE_uncert,  color='#76EE00',fmt='D', capsize=4)
+ax.plot(P_zCent, PSE_alpha,color='#76EE00',marker='D', ls=" ", label='Popesso 2006')
+ax.errorbar(P_zCent, Pl_alpha, yerr=Pl_uncert, fmt='gD', capsize=4)
+ax.plot(P_zCent, Pl_alpha, 'gD', label='Popesso 2006: LTGs')
+
+
+
+
+ax.errorbar(H_zCent, H_alpha, yerr=H_uncert,  color='#EE7AE9',fmt='p', capsize=4)
+ax.plot(H_zCent, H_alpha, color='#EE7AE9', marker='p', ls=" ", label='Hansen 2009')
+
+ax.errorbar(M_zCent, Mr_alpha, yerr= Mr_uncert, color ='#FF8000',fmt='o', capsize=4)
+ax.plot(M_zCent, Mr_alpha, color = '#FF8000',marker='o', ls=" ", label='Montero-Dorta & Prada 2009')
+
+
+ax.errorbar(L_zCent, Lr_alpha, yerr= Lr_uncert, color='#00688B',fmt='P', capsize=4)
+ax.plot(L_zCent, Lr_alpha, color='#00688B',marker='P', ls=" ",label='Loveday 2011')
+
+
+
+ax.errorbar(Z1_zCent, Z1_alpha, yerr=Z1_uncert, color= '#FFFF00',fmt='v', capsize=4)
+ax.plot(Z1_zCent, Z1_alpha, color='#FFFF00', marker='v',ls=" ", label='Zhang 2019')
+ax.errorbar(Z2_zCent, Z2_alpha, yerr=Z2_uncert, color= '#FFFF00',fmt='v', capsize=4)
+ax.plot(Z2_zCent, Z2_alpha, color='#FFFF00', marker='v',ls=" ")
+
+ax.errorbar(Pud1_zCent, Pud1_alpha, yerr= Pud1_uncert,color= '#00EEEE',fmt='h', capsize=4)
+ax.plot(Pud1_zCent, Pud1_alpha,color='#00EEEE', marker='h',ls=" ", label='Puddu 2021')
+ax.errorbar(Pud2_zCent, Pud2_alpha, yerr= Pud2_uncert, color= '#00EEEE',fmt='h', capsize=4)
+ax.plot(Pud2_zCent, Pud2_alpha, color='#00EEEE', marker='h', ls=" ")
+ax.errorbar(Pud3_zCent, Pud3_alpha, yerr= Pud3_uncert, color= '#00EEEE',fmt='h', capsize=4)
+ax.plot(Pud3_zCent, Pud3_alpha, color='#00EEEE', marker='h', ls=" ")
+ax.errorbar(Pud4_zCent, Pud4_alpha, yerr= Pud4_uncert, color= '#00EEEE',fmt='h', capsize=4)
+ax.plot(Pud4_zCent, Pud4_alpha, color='#00EEEE', marker='h', ls=" ")
+
+
+ax.tick_params(axis='x',which='both',direction='in')
+ax.minorticks_on()
+ax.tick_params(axis='y', which='both', direction="in")
+plt.xlim(0, 1)
+plt.ylim(-2.90, -0.10)
+plt.xlabel('redshift')
+plt.ylabel(r'$\alpha$')
+plt.title(r'$\alpha$'+' '+'vs'+ ' '+r'$z$', fontsize=20)
+#plt.title(r'$\alpha$'+' '+'vs'+ ' '+r'$z$'+ ' '+'- Mass subsets', fontsize=20)
+plt.legend(prop={'size':6.5})
+plt.show()
+
+import IPython
+IPython.embed()
+sys.exit()

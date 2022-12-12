@@ -1,0 +1,340 @@
+#!/usr/bin/env python
+
+#Shows evolution of charactersitic magnitude m*
+
+from astLib import *
+import numpy as np
+import pylab
+import matplotlib.pyplot as plt
+
+bc03 = astSED.BC03Model("/home/dames/zCluster/ancillaryData/BC03Models/tau0p1Gyr_m62.20")
+r=astSED.Passband("/home/dames/zCluster/ancillaryData/filters/decam.r.am1p4.dat.txt")
+
+"""Our work: r-band"""
+
+zCents= [0.225, 0.275, 0.325, 0.375, 0.425, 0.475, 0.525, 0.575, 0.625, 0.675, 0.725, 0.775]
+
+#full sample
+
+mags = [18.513454861111118, 18.910156249999996, 19.102864583333336, 19.395399305555557, 19.96050347222222, 20.189670138888886, 20.52387152777778, 20.63411458333333, 20.62977430555556, 20.558593750000007, 20.61414930555556, 20.61501736111111]
+uncert = [0.0193095441398325, 0.02024558271624667, 0.03422526062307124, 0.04139406914320196, 0.0338111193552135, 0.04708823170295571, 0.0580538993148985, 0.0843400549518392, 0.10207905626536393, 0.12719808263334031, 0.16157023259628012, 0.2307649723165938]
+
+
+#Low-mass subset
+low_mags=[18.51866319444445, 18.914496527777782, 19.102864583333336, 19.424913194444443,  19.889322916666664, 20.03428819444445, 20.36501736111111, 20.267795138888886, 20.305989583333332, 20.850260416666668, 21.19835069444444, 20.139322916666664]
+low_uncert = [0.04785959564248075, 0.05094662897253457, 0.07688074580629307, 0.08326731499530789, 0.09062791174747084, 0.12164732847079954, 0.14185899060727764, 0.2710191678465705, 0.15666263759954294, 0.25211903502421645, 0.2983471990216071, 1.8222463114937244] 
+
+#High-mass subset
+high_mags=[18.482204861111107, 18.96571180555555, 19.20529513888889, 19.621961805555557, 20.069010416666668, 20.311197916666668, 20.67317708333334, 20.84765625, 20.682725694444443, 20.60199652777778, 20.368489583333332,21.13585069444444]
+high_uncert = [0.03077602144288097, 0.033553075927557754, 0.05774157205800255, 0.0578105607821971, 0.04684861106961394, 0.06940756524543487, 0.08751018528131821, 0.10624111100877412, 0.15952145258363917, 0.22684208916052923, 0.25100746689680803, 0.5531022490220626]
+
+
+
+#For comparison
+#Popesso2006 - 69 clusters (total LF, just r-band)
+P_zCent=0.1
+#calc absolute magnitudes
+DA = astCalc.da(P_zCent)           #Angular diameter distance
+DL = astCalc.dl(P_zCent)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+
+
+#Schechter+Exponential
+PSEr_mag=-21.16+dm
+PSEr_uncert=0.26
+
+#late-type galaxies in R200
+Plr_mag = -21.71+dm
+Plr_uncert=0.52
+
+
+
+
+#Hansen2009 - i-band converted to z-band by Zhang2019
+H_zCent=0.40
+#calc absolute magnitudes
+DA = astCalc.da(H_zCent)           #Angular diameter distance
+DL = astCalc.dl(H_zCent)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+
+bc03 = astSED.BC03Model("ancillaryData/BC03Models/tau0p1Gyr_m62.20")
+m=bc03.getSED(0.1, z= 0.40)
+
+
+H_zapp = -22.13+dm
+z= astSED.Passband('/home/dames/zCluster/zCluster/passbands/z_SDSS.res')
+r=astSED.Passband('/home/dames/zCluster/zCluster/passbands/r_SDSS.res')
+rz = m.calcColour(r,z,magType='AB')   #r-z difference
+
+Hz_mag= H_zapp+rz
+
+
+
+
+
+#Montero-Dorta&Prada2009
+M_zCent=0.1
+#calc absolute magnitudes
+DA = astCalc.da(M_zCent)           #Angular diameter distance
+DL = astCalc.dl(M_zCent)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+
+"""
+bc03 = astSED.BC03Model("ancillaryData/BC03Models/tau0p1Gyr_m62.20")
+m=bc03.getSED(0.1, z= 0.1)
+
+#u-band
+M_uapp = -17.72+dm
+Mu_uncert=0.07
+u= astSED.Passband('/home/dames/zCluster/zCluster/passbands/u_SDSS.res')
+r=astSED.Passband('/home/dames/zCluster/zCluster/passbands/r_SDSS.res')
+ur = m.calcColour(u,r,magType='AB')   #u-r difference
+
+Mu_mag= M_uapp+ur
+
+#g-band
+M_gapp = -19.53+dm
+Mg_uncert=0.04
+g= astSED.Passband('/home/dames/zCluster/zCluster/passbands/g_SDSS.res')
+r=astSED.Passband('/home/dames/zCluster/zCluster/passbands/r_SDSS.res')
+gr = m.calcColour(g,r,magType='AB')   #g-r difference
+
+Mg_mag= M_gapp+gr
+"""
+
+#r-band
+Mr_mag = -20.71+dm
+Mr_uncert=0.04
+
+"""
+#i-band
+M_iapp = -20.93+dm
+Mi_uncert=0.05
+i= astSED.Passband('/home/dames/zCluster/zCluster/passbands/i_SDSS.res')
+r=astSED.Passband('/home/dames/zCluster/zCluster/passbands/r_SDSS.res')
+ri = m.calcColour(r,i,magType='AB')   #r-i difference
+
+Mi_mag= M_iapp+ri
+
+#z-band
+M_zapp = -21.40+dm
+Mz_uncert=0.05
+z= astSED.Passband('/home/dames/zCluster/zCluster/passbands/z_SDSS.res')
+r=astSED.Passband('/home/dames/zCluster/zCluster/passbands/r_SDSS.res')
+rz = m.calcColour(r,z,magType='AB')   #r-z difference
+
+Mz_mag= M_zapp+rz
+"""
+
+
+
+#Loveday2012 - field LF, 0.002 < z < 0.5, z< 0.1 low-z 
+L_zCent=0.1
+#calc absolute magnitudes
+DA = astCalc.da(L_zCent)           #Angular diameter distance
+DL = astCalc.dl(L_zCent)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+
+bc03 = astSED.BC03Model("ancillaryData/BC03Models/tau0p1Gyr_m62.20")
+m=bc03.getSED(0.1, z= 0.1)
+
+"""
+#u-band
+L_uapp = -18.02+dm
+Lu_uncert=0.04
+u= astSED.Passband('/home/dames/zCluster/zCluster/passbands/u_SDSS.res')
+r=astSED.Passband('/home/dames/zCluster/zCluster/passbands/r_SDSS.res')
+ur = m.calcColour(u,r,magType='AB')   #u-r difference
+
+Lu_mag= L_uapp+ur
+
+#g-band
+L_gapp= -19.71+dm
+Lg_uncert=0.02
+g= astSED.Passband('/home/dames/zCluster/zCluster/passbands/g_SDSS.res')
+r=astSED.Passband('/home/dames/zCluster/zCluster/passbands/r_SDSS.res')
+gr = m.calcColour(g,r,magType='AB')   #g-r difference
+
+Lg_mag= L_gapp+gr
+"""
+
+#r-band
+Lr_mag= -20.73+dm
+Lr_uncert=0.03
+
+"""
+#i-band
+L_iapp= -21.13+dm
+Li_uncert=0.02
+i= astSED.Passband('/home/dames/zCluster/zCluster/passbands/i_SDSS.res')
+r=astSED.Passband('/home/dames/zCluster/zCluster/passbands/r_SDSS.res')
+ri = m.calcColour(r,i,magType='AB')   #r-i difference
+
+Li_mag= L_iapp+ri
+
+#z-band
+L_zapp= -21.41+dm
+Lz_uncert=0.05
+z= astSED.Passband('/home/dames/zCluster/zCluster/passbands/z_SDSS.res')
+r=astSED.Passband('/home/dames/zCluster/zCluster/passbands/r_SDSS.res')
+rz = m.calcColour(r,z,magType='AB')   #r-z difference
+
+Lz_mag= L_zapp+rz
+"""
+
+
+
+
+
+
+#Zhang2019 - apparent z band
+#0.1<z<0.4 - 64 clusters
+Z_zCent=0.25
+r= astSED.Passband('/home/dames/zCluster/zCluster/passbands/rDES.res')
+z=astSED.Passband('/home/dames/zCluster/zCluster/passbands/zDES.res')
+bc03 = astSED.BC03Model("ancillaryData/BC03Models/tau0p1Gyr_m62.20")
+m=bc03.getSED(0.1, z= 0.25)
+rz = m.calcColour(r,z,magType='AB')   #r-z difference
+
+zapp = 18.17     #m_z = 18.17+-0.18
+
+Z_mag = zapp + rz   #r-band apparent mag. 
+Z_uncert=0.18
+
+#0.4<z<1.05 -27 clusters
+Z2_zCent=0.49
+m2=bc03.getSED(0.1, z= 0.49)
+rz2 = m2.calcColour(r,z,magType='AB')   #r-z difference
+
+zapp2 = 19.96     #m_z = 19.96+-0.23
+
+Z_mag2 = zapp2 + rz2   #r-band apparent mag. 
+Z_uncert2=0.23
+
+
+#Puddu2020 - r-band in KiDS DR3 (Assume to be SDSS)
+Pud_zCent1= 0.24
+#calc absolute magnitudes
+DA = astCalc.da(Pud_zCent1)           #Angular diameter distance
+DL = astCalc.dl(Pud_zCent1)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+Pud_M1=-21.50
+Pud_M1uncert=0.03
+
+Pud_mag1 = Pud_M1 +dm   #-5
+
+
+Pud_zCent2 =0.41
+#calc absolute magnitudes
+DA = astCalc.da(Pud_zCent2)           #Angular diameter distance
+DL = astCalc.dl(Pud_zCent2)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+Pud_M2=-21.59
+Pud_M2uncert=0.04
+
+Pud_mag2 = Pud_M2 +dm
+
+
+Pud_zCent3 =0.50
+#calc absolute magnitudes
+DA = astCalc.da(Pud_zCent3)           #Angular diameter distance
+DL = astCalc.dl(Pud_zCent3)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+Pud_M3=-21.65
+Pud_M3uncert=0.05
+
+Pud_mag3 = Pud_M3 +dm
+
+
+Pud_zCent4 =0.63
+#calc absolute magnitudes
+DA = astCalc.da(Pud_zCent4)           #Angular diameter distance
+DL = astCalc.dl(Pud_zCent4)           #Luminosity distance
+dm= 5*(np.log10(DL*1e5))           #distance modulus
+Pud_M4=-21.61
+Pud_M4uncert=0.05
+
+Pud_mag4 = Pud_M4 +dm
+
+
+#Other bands
+#mags = bc03.calcColour(passband, r, magType='AB')
+
+
+fig, ax= plt.subplots()
+
+ax.errorbar(zCents, mags, yerr=uncert, fmt='ks', capsize=4)
+ax.plot(zCents, mags, 'ks', label='This work: All')
+
+ax.errorbar(zCents, low_mags, yerr=low_uncert, fmt='b^', capsize=4)
+ax.plot(zCents, low_mags, 'b^', label='This work: low-mass')
+
+ax.errorbar(zCents, high_mags, yerr=high_uncert, fmt='r^', capsize=4)
+ax.plot(zCents, high_mags, 'r^', label='This work: high-mass')
+
+ax.tick_params(axis='x',which='both',direction='in')
+ax.minorticks_on()
+ax.tick_params(axis='y', which='both', direction="in")
+
+
+ax.errorbar(P_zCent, PSEr_mag, yerr=PSEr_uncert,color='#76EE00',fmt='D', capsize=4)
+ax.plot(P_zCent, PSEr_mag, color='#76EE00',marker='D', ls=" ", label='Popesso 2006')
+ax.errorbar(P_zCent, Plr_mag, yerr=Plr_uncert, fmt='gD', capsize=4)
+ax.plot(P_zCent, Plr_mag, 'gD', label='Popesso 2006: LTGs')
+
+
+
+#ax.errorbar(H_zCent, Hi_mag, fmt='ms', capsize=4)
+ax.plot(H_zCent, Hz_mag, color='#EE7AE9', marker='p', ls=" ", label='Hansen 2009')
+
+
+
+ax.errorbar(M_zCent, Mr_mag, yerr= Mr_uncert, color ='#FF8000',fmt='o', capsize=4)
+ax.plot(M_zCent, Mr_mag, color = '#FF8000',marker='o', ls=" ", label='Montero-Dorta & Prada 2009')
+
+
+ax.errorbar(L_zCent, Lr_mag, yerr= Lr_uncert, color='#00688B',fmt='P', capsize=4)
+ax.plot(L_zCent, Lr_mag, color='#00688B',marker='P', ls=" ",label='Loveday 2011')
+
+
+ax.errorbar(Z_zCent, Z_mag, yerr= Z_uncert,color= '#FFFF00',fmt='v', capsize=4)
+ax.plot(Z_zCent, Z_mag,color='#FFFF00', marker='v',ls=" ", label='Zhang 2019')
+ax.errorbar(Z2_zCent, Z_mag2, yerr= Z_uncert2, color= '#FFFF00',fmt='v', capsize=4)
+ax.plot(Z2_zCent, Z_mag2, color='#FFFF00', marker='v', ls=" ")
+
+
+ax.errorbar(Pud_zCent1, Pud_mag1, yerr= Pud_M1uncert,color= '#00EEEE',fmt='h', capsize=4)
+ax.plot(Pud_zCent1, Pud_mag1,color='#00EEEE', marker='h',ls=" ", label='Puddu 2021')
+ax.errorbar(Pud_zCent2, Pud_mag2, yerr= Pud_M2uncert, color= '#00EEEE',fmt='h', capsize=4)
+ax.plot(Pud_zCent2, Pud_mag2, color='#00EEEE', marker='h', ls=" ")
+ax.errorbar(Pud_zCent3, Pud_mag3, yerr= Pud_M3uncert, color= '#00EEEE',fmt='h', capsize=4)
+ax.plot(Pud_zCent3, Pud_mag3, color='#00EEEE', marker='h', ls=" ")
+ax.errorbar(Pud_zCent4, Pud_mag4, yerr= Pud_M4uncert, color= '#00EEEE',fmt='h', capsize=4)
+ax.plot(Pud_zCent4, Pud_mag4, color='#00EEEE', marker='h', ls=" ")
+
+
+
+magTrack2 = bc03.getMagEvolution(r, 19.10, 0.325, 2.0, zStepSize=0.05,onePlusZSteps=True, magType='AB')
+magTrack5 = bc03.getMagEvolution(r, 19.10, 0.325, 5.0, zStepSize=0.05,onePlusZSteps=True,magType='AB')
+
+#magTrack3 = bc03.getMagEvolution(r, 19.35, 0.425, 3.0, zStepSize=0.05,onePlusZSteps=True, magType='AB')
+
+
+#pylab.plot(magTrack3['z'], magTrack3['mag'], 'b--', label='zf=3.0')
+plt.plot(magTrack2['z'], magTrack2['mag'], '#FFB90F',ls='--', label='zf=2.0')
+plt.plot(magTrack5['z'], magTrack5['mag'],'#CD3278',ls='--', label='zf=5.0')  #'#f2f312' '#53f312'
+
+plt.xlim(0, 1)
+plt.ylim(16, 23)
+plt.xlabel('redshift')
+plt.ylabel(r'$m_r$' +' '+'(AB)')
+plt.title(r'$m^{*}$'+' '+'vs'+ ' '+r'$z$', fontsize=20)
+#plt.title(r'$m^{*}$'+' '+'vs'+ ' '+r'$z$'+' '+'- Mass subsets')
+plt.legend(prop={'size':6})
+plt.show()
+#pylab.savefig("magEvo.png")
+import IPython
+IPython.embed()
+sys.exit()
+
+
