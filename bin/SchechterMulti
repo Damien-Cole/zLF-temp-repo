@@ -1,0 +1,495 @@
+#!/usr/bin/env python
+
+"""Schechter function fitting for multiple composite LFs """
+
+import os
+import sys
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+import astropy.table as atpy
+import astropy.io.fits as pyfits
+from scipy.optimize import fmin
+from astLib import *
+from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
+import time
+import statistics
+
+
+
+"""Define Schechter function - predicted model"""
+#------------------------------------------------------------------------------------------------------------
+def schechterm(params, magnitude):
+    """Schechter luminosity function by magnitudes."""
+    """params = mstar,alpha, ###phiStar"""
+    
+    mstarMinm = 0.4 *(params[0]- magnitude) 
+    return (0.4 * np.log(10) *(10.0)**(mstarMinm * (params[1] + 1.)) * np.exp(-10.**(mstarMinm)))
+    
+#------------------------------------------------------------------------------------------------------------
+
+
+start=time.time() 
+if __name__ == '__main__':
+    
+    parser = argparse.ArgumentParser("SchechterMulti")
+    parser.add_argument("LFfileName1", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName1", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("LFfileName2", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName2", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("LFfileName3", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName3", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("LFfileName4", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName4", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("LFfileName5", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName5", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("LFfileName6", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName6", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("LFfileName7", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName7", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("LFfileName8", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName8", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("LFfileName9", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName9", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("LFfileName10", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName10", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("LFfileName11", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName11", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    parser.add_argument("LFfileName12", help="""A .fits table with LF details: r-band mag. bins - 'mr', no. of galaxies - 'N' & poisson errors - 'Nerr'""")
+    parser.add_argument("catalogFileName12", help="""A .fits table with cluster details in chosen redshift range. Contains redshift and mass.""")
+    
+    
+    args = parser.parse_args()
+    LFfileName1=args.LFfileName1
+    catalogFileName1=args.catalogFileName1
+    LFfileName2=args.LFfileName2
+    catalogFileName2=args.catalogFileName2
+    LFfileName3=args.LFfileName3
+    catalogFileName3=args.catalogFileName3
+    LFfileName4=args.LFfileName4
+    catalogFileName4=args.catalogFileName4
+    LFfileName5=args.LFfileName5
+    catalogFileName5=args.catalogFileName5
+    LFfileName6=args.LFfileName6
+    catalogFileName6=args.catalogFileName6
+    LFfileName7=args.LFfileName7
+    catalogFileName7=args.catalogFileName7
+    LFfileName8=args.LFfileName8
+    catalogFileName8=args.catalogFileName8
+    LFfileName9=args.LFfileName9
+    catalogFileName9=args.catalogFileName9
+    LFfileName10=args.LFfileName10
+    catalogFileName10=args.catalogFileName10
+    LFfileName11=args.LFfileName11
+    catalogFileName11=args.catalogFileName11
+    LFfileName12=args.LFfileName12
+    catalogFileName12=args.catalogFileName12
+    
+    
+    obsLF1=atpy.Table().read(LFfileName1)
+    clusterCat1= atpy.Table().read(catalogFileName1)
+    obsLF2=atpy.Table().read(LFfileName2)
+    clusterCat2= atpy.Table().read(catalogFileName2)
+    obsLF3=atpy.Table().read(LFfileName3)
+    clusterCat3= atpy.Table().read(catalogFileName3)
+    obsLF4=atpy.Table().read(LFfileName4)
+    clusterCat4= atpy.Table().read(catalogFileName4)
+    obsLF5=atpy.Table().read(LFfileName5)
+    clusterCat5= atpy.Table().read(catalogFileName5)
+    obsLF6=atpy.Table().read(LFfileName6)
+    clusterCat6= atpy.Table().read(catalogFileName6)
+    obsLF7=atpy.Table().read(LFfileName7)
+    clusterCat7= atpy.Table().read(catalogFileName7)
+    obsLF8=atpy.Table().read(LFfileName8)
+    clusterCat8= atpy.Table().read(catalogFileName8)
+    obsLF9=atpy.Table().read(LFfileName9)
+    clusterCat9= atpy.Table().read(catalogFileName9)
+    obsLF10=atpy.Table().read(LFfileName10)
+    clusterCat10= atpy.Table().read(catalogFileName10)
+    obsLF11=atpy.Table().read(LFfileName11)
+    clusterCat11= atpy.Table().read(catalogFileName11)
+    obsLF12=atpy.Table().read(LFfileName12)
+    clusterCat12= atpy.Table().read(catalogFileName12)
+    
+    
+    """
+    mstarlist = [18.51, 18.91, 19.10, 19.40, 19.96, 20.19, 20.52, 20.63, 20.63, 20.56, 20.61, 20.62 ]
+    alphalist=[-1.18, -1.18, -1.31, -1.33, -1.19, -1.21, -1.20, -1.33, -1.50, -1.72, -1.94, -2.19]
+    """
+    
+    #full set
+    mstarlist =[18.513454861111118, 18.910156249999996, 19.102864583333336, 19.395399305555557, 19.96050347222222, 20.189670138888886, 20.52387152777778, 20.63411458333333, 20.62977430555556, 20.558593750000007, 20.61414930555556, 20.61501736111111]
+    
+    alphalist=[-1.1764125631313131, -1.1803582702020203, -1.3054371843434347, -1.3259548611111112, -1.1862768308080809, -1.2131076388888888, -1.2012705176767677, -1.3283222853535355, -1.504695391414141, -1.7150015782828283,  -1.9418797348484849, -2.1888809974747474]
+    
+    phiStarlist=[4280.678716987008, 5173.346801010524, 3370.3286052581598, 3069.232718383244, 5201.185320750921, 3936.870254656553, 4258.186544903768, 2975.7153327112355,  2063.4306499324325, 832.3364775748565, 401.28060018764216, 152.51766217532793]
+    
+    """
+    #low mass set
+    mstarlist=[18.51866319444445, 18.914496527777782, 19.102864583333336, 19.424913194444443,  19.889322916666664, 20.03428819444445, 20.36501736111111, 20.267795138888886, 20.305989583333332, 20.850260416666668, 21.19835069444444, 20.139322916666664]
+    alphalist=[-1.1811474116161613,-1.1823311237373737, -1.294783775252525, -1.2900489267676765, -1.2273121843434347, -1.2987294823232325, -1.3093828914141412, -1.4739188762626263, -1.6230666035353534, -1.6262231691919193,-1.6356928661616157,  -2.3577572601010104]
+    phiStarlist=[805.0577542063285, 953.5631554570522, 650.2812163976082, 594.0768780941121, 846.1788697408082, 576.1446935493698, 633.0335609907359, 368.9653123750375, 256.8398821710485, 241.69313239854284, 193.37391344000574, 
+    11.651981872123434]
+    
+    
+    import IPython
+    IPython.embed()
+    sys.exit()
+    
+    """
+    """
+    #high mass set
+    mstarlist=[18.482204861111107, 18.96571180555555, 19.20529513888889, 19.621961805555557, 20.069010416666668, 20.311197916666668, 20.67317708333334, 20.84765625, 20.682725694444443, 20.60199652777778, 20.368489583333332,21.13585069444444]
+    
+    alphalist=[-1.1547111742424243, -1.1298532196969697, -1.2600615530303028, -1.2470407196969697, -1.105389835858586, -1.1247238005050504, -1.0876341540404042, -1.1799636994949492, -1.494041982323232, -1.7146070075757573, -2.0705097853535355, -2.053543244949495]
+    
+    phiStarlist=[1518.3470101369924, 1971.3692545235858, 1263.7929658527603, 1426.3215664769261, 2151.533830683605, 1544.527259269288, 1711.119707158935, 1328.523671704842, 715.505060410349, 281.9123782166213,  79.99036668301139,118.2013965441235]
+    """
+    
+    
+    zCents= [0.225, 0.275, 0.325, 0.375, 0.425, 0.475, 0.525, 0.575, 0.625, 0.675, 0.725, 0.775]
+   
+    obsLFlist=[obsLF1,obsLF2,obsLF3,obsLF4, obsLF5,obsLF6,obsLF7,obsLF8,obsLF9,obsLF10,obsLF11, obsLF12]
+    
+    
+    
+    modelmr=np.linspace(17.0,22.5,100)
+    #phiStarlist=[]
+    Mstarlist=[]
+    doflist=[]
+    modellist=[]
+    
+    #obsLF1
+    newparams1=mstarlist[0],alphalist[0]
+    #y1 = schechterm(newparams1,obsLF1['mr'])
+    #phiStar1=(np.sum(obsLF1['N']))/(np.sum(y1))
+    #phiStarlist.append(phiStar1)
+    new_modelN1 = phiStarlist[0]*schechterm(newparams1,modelmr)  
+    modellist.append(new_modelN1)
+            
+    #finding Mstar
+    zCent1 = zCents[0]                           #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent1)                      #Angular diameter distance
+    DL = astCalc.dl(zCent1)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar1 = newparams1[0]-dm 
+    Mstarlist.append(Mstar1)
+    dof1 = len(obsLF1['N'])-2  
+    doflist.append(dof1)
+    
+    #obsLF2
+    newparams2=mstarlist[1],alphalist[1]
+    #y2 = schechterm(newparams2,obsLF2['mr'])
+    #phiStar2=(np.sum(obsLF2['N']))/(np.sum(y2))
+    #phiStarlist.append(phiStar2)
+    new_modelN2 = phiStarlist[1]*schechterm(newparams2,modelmr)  
+    modellist.append(new_modelN2)
+            
+    #finding Mstar
+    zCent2 = zCents[1]                           #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent2)                      #Angular diameter distance
+    DL = astCalc.dl(zCent2)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar2 = newparams2[0]-dm 
+    Mstarlist.append(Mstar2)
+    dof2 = len(obsLF2['N'])-2  
+    doflist.append(dof2)
+        
+    
+    #obsLF3
+    newparams3=mstarlist[2],alphalist[2]
+    #y3 = schechterm(newparams3,obsLF3['mr'])
+    #phiStar3=(np.sum(obsLF3['N']))/(np.sum(y3))
+    #phiStarlist.append(phiStar3)
+    new_modelN3 = phiStarlist[2]*schechterm(newparams3,modelmr)  
+    modellist.append(new_modelN3)
+            
+    #finding Mstar
+    zCent3 = zCents[2]                           #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent3)                      #Angular diameter distance
+    DL = astCalc.dl(zCent3)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar3 = newparams3[0]-dm 
+    Mstarlist.append(Mstar3)
+    dof3 = len(obsLF3['N'])-2  
+    doflist.append(dof3)
+        
+    
+    #obsLF4
+    newparams4=mstarlist[3],alphalist[3]
+    #y4 = schechterm(newparams4,obsLF4['mr'])
+    #phiStar4=(np.sum(obsLF4['N']))/(np.sum(y4))
+    #phiStarlist.append(phiStar4)
+    new_modelN4 = phiStarlist[3]*schechterm(newparams4,modelmr)  
+    modellist.append(new_modelN4)
+            
+    #finding Mstar
+    zCent4 = zCents[3]                           #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent4)                      #Angular diameter distance
+    DL = astCalc.dl(zCent4)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar4 = newparams4[0]-dm 
+    Mstarlist.append(Mstar4)
+    dof4 = len(obsLF4['N'])-2  
+    doflist.append(dof4)
+    
+    
+    #obsLF5
+    newparams5=mstarlist[4],alphalist[4]
+    #y5 = schechterm(newparams5,obsLF5['mr'])
+    #phiStar5=(np.sum(obsLF5['N']))/(np.sum(y5))
+    #phiStarlist.append(phiStar5)
+    new_modelN5 = phiStarlist[4]*schechterm(newparams5,modelmr)  
+    modellist.append(new_modelN5)
+            
+    #finding Mstar
+    zCent5 = zCents[4]                           #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent5)                      #Angular diameter distance
+    DL = astCalc.dl(zCent5)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar5 = newparams5[0]-dm 
+    Mstarlist.append(Mstar5)
+    dof5 = len(obsLF5['N'])-2  
+    doflist.append(dof5)
+    
+    
+    #obsLF6
+    newparams6=mstarlist[5],alphalist[5]
+    #y6 = schechterm(newparams6,obsLF6['mr'])
+    #phiStar6=(np.sum(obsLF6['N']))/(np.sum(y6))
+    #phiStarlist.append(phiStar6)
+    new_modelN6 = phiStarlist[5]*schechterm(newparams6,modelmr)  
+    modellist.append(new_modelN6)
+            
+    #finding Mstar
+    zCent6 = zCents[5]                           #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent6)                      #Angular diameter distance
+    DL = astCalc.dl(zCent6)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar6 = newparams6[0]-dm 
+    Mstarlist.append(Mstar6)
+    dof6 = len(obsLF6['N'])-2  
+    doflist.append(dof6)
+    
+    
+    #obsLF7
+    newparams7=mstarlist[6],alphalist[6]
+    #y7 = schechterm(newparams7,obsLF7['mr'])
+    #phiStar7=(np.sum(obsLF7['N']))/(np.sum(y7))
+    #phiStarlist.append(phiStar7)
+    new_modelN7 = phiStarlist[6]*schechterm(newparams7,modelmr)  
+    modellist.append(new_modelN7)
+            
+    #finding Mstar
+    zCent7 = zCents[6]                           #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent7)                      #Angular diameter distance
+    DL = astCalc.dl(zCent7)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar7 = newparams7[0]-dm 
+    Mstarlist.append(Mstar7)
+    dof7 = len(obsLF7['N'])-2  
+    doflist.append(dof7)
+    
+    
+    #obsLF8
+    newparams8=mstarlist[7],alphalist[7]
+    #y8 = schechterm(newparams8,obsLF8['mr'])
+    #phiStar8=(np.sum(obsLF8['N']))/(np.sum(y8))
+    #phiStarlist.append(phiStar8)
+    new_modelN8 = phiStarlist[7]*schechterm(newparams8,modelmr)  
+    modellist.append(new_modelN8)
+            
+    #finding Mstar
+    zCent8 = zCents[7]                           #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent8)                      #Angular diameter distance
+    DL = astCalc.dl(zCent8)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar8 = newparams8[0]-dm 
+    Mstarlist.append(Mstar8)
+    dof8 = len(obsLF8['N'])-2  
+    doflist.append(dof8)
+    
+    
+    #obsLF9
+    newparams9=mstarlist[8],alphalist[8]
+    #y9 = schechterm(newparams9,obsLF9['mr'])
+    #phiStar9=(np.sum(obsLF9['N']))/(np.sum(y9))
+    #phiStarlist.append(phiStar9)
+    new_modelN9 = phiStarlist[8]*schechterm(newparams9,modelmr)  
+    modellist.append(new_modelN9)
+            
+    #finding Mstar
+    zCent9 = zCents[8]                           #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent9)                      #Angular diameter distance
+    DL = astCalc.dl(zCent9)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar9 = newparams9[0]-dm 
+    Mstarlist.append(Mstar9)
+    dof9 = len(obsLF9['N'])-2  
+    doflist.append(dof9)
+    
+    
+    
+    #obsLF10
+    newparams10=mstarlist[9],alphalist[9]
+    #y10 = schechterm(newparams10,obsLF10['mr'])
+    #phiStar10=(np.sum(obsLF10['N']))/(np.sum(y10))
+    #phiStarlist.append(phiStar10)
+    new_modelN10 = phiStarlist[9]*schechterm(newparams10,modelmr)  
+    modellist.append(new_modelN10)
+            
+    #finding Mstar
+    zCent10 = zCents[9]                           #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent10)                      #Angular diameter distance
+    DL = astCalc.dl(zCent10)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar10 = newparams10[0]-dm 
+    Mstarlist.append(Mstar10)
+    dof10 = len(obsLF10['N'])-2  
+    doflist.append(dof10)
+    
+    
+    #obsLF11
+    newparams11=mstarlist[10],alphalist[10]
+    #y11 = schechterm(newparams11,obsLF11['mr'])
+    #phiStar11=(np.sum(obsLF11['N']))/(np.sum(y11))
+    #phiStarlist.append(phiStar11)
+    new_modelN11 = phiStarlist[10]*schechterm(newparams11,modelmr)  
+    modellist.append(new_modelN11)
+            
+    #finding Mstar
+    zCent11 = zCents[10]                           #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent11)                      #Angular diameter distance
+    DL = astCalc.dl(zCent11)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar11 = newparams11[0]-dm 
+    Mstarlist.append(Mstar11)
+    dof11 = len(obsLF11['N'])-2  
+    doflist.append(dof11)
+    
+    
+    #obsLF12
+    newparams12=mstarlist[11],alphalist[11]
+    #y12 = schechterm(newparams12,obsLF12['mr'])
+    #phiStar12=(np.sum(obsLF12['N']))/(np.sum(y12))
+    #phiStarlist.append(phiStar12)
+    new_modelN12 = phiStarlist[11]*schechterm(newparams12,modelmr)  
+    modellist.append(new_modelN12)
+            
+    #finding Mstar
+    zCent12 = zCents[11]                           #redshift to which we k-corr. (i.e. median of redshift interval)
+    DA = astCalc.da(zCent12)                      #Angular diameter distance
+    DL = astCalc.dl(zCent12)                      #Luminosity distance
+    dm= 5*(np.log10(DL*1e5))                    #distance modulus
+    Mstar12 = newparams12[0]-dm 
+    Mstarlist.append(Mstar12)
+    dof12 = len(obsLF12['N'])-2  
+    doflist.append(dof12)
+    
+    
+    """points=['ko','rv','bs','yo', 'g*', 'c^', 'mD', 'ro', 'b^', 'gs', 'c*', 'kv'] 
+    lcolour=['k', 'r', 'b', 'y', 'g', 'c', 'm', 'r', 'b', 'g', 'c', 'k']
+    lstyle=[':', '--', 'dotted', '-', '-.', '-', '--', ':', '-.', 'dotted', '--', '-.']
+    
+    """
+    
+    
+    
+    
+    fig, ax= plt.subplots()
+    
+    ax.errorbar(obsLF1['mr'], obsLF1['N'], yerr =obsLF1['Nerr'],color ='k',fmt='o', label='<z> = 0.225',capsize=3)
+    ax.errorbar(obsLF2['mr'], obsLF2['N'], yerr=obsLF2['Nerr'],color = 'b',fmt='v', label='<z> = 0.275',capsize=3)
+    ax.errorbar(obsLF3['mr'], obsLF3['N'], yerr=obsLF3['Nerr'],color='m', fmt='*', label='<z> = 0.325',capsize=3)
+    ax.errorbar(obsLF4['mr'], obsLF4['N'], yerr=obsLF4['Nerr'], color='g',fmt='s', label='<z> = 0.375',capsize=3)
+    ax.errorbar(obsLF5['mr'], obsLF5['N'],  yerr=obsLF5['Nerr'],color ='c',fmt='^', label='<z> = 0.425',capsize=3)
+    ax.errorbar(obsLF6['mr'], obsLF6['N'],   yerr=obsLF6['Nerr'],color='#53f312',fmt='o', label='<z> = 0.475',capsize=3)
+    ax.errorbar(obsLF7['mr'], obsLF7['N'],   yerr=obsLF7['Nerr'],color ='r',fmt='v', label='<z> = 0.525',capsize=3)
+    ax.errorbar(obsLF8['mr'], obsLF8['N'],   yerr=obsLF8['Nerr'],color ='#edd010',fmt='D', label='<z> = 0.575',capsize=3)
+    ax.errorbar(obsLF9['mr'], obsLF9['N'],   yerr=obsLF9['Nerr'],color = '#16f6eb',fmt='*', label='<z> = 0.625',capsize=3)
+    ax.errorbar(obsLF10['mr'], obsLF10['N'],  yerr=obsLF10['Nerr'],color= '#ef12f3',fmt='D', label= '<z> = 0.675', capsize=3)
+    ax.errorbar(obsLF11['mr'], obsLF11['N'],   yerr=obsLF11['Nerr'],color = '#f2f312',fmt='s', label='<z> = 0.725', capsize=3)
+    ax.errorbar(obsLF12['mr'], obsLF12['N'],   yerr=obsLF12['Nerr'],color='#f36812',fmt='v', label='<z> = 0.775', capsize=3)
+    
+    
+    
+    
+    
+    ax.plot(modelmr,new_modelN1,'k', ls='-')
+    ax.plot(modelmr,new_modelN2,'b',ls='-')
+    ax.plot(modelmr,new_modelN3, 'm', ls='-')
+    ax.plot(modelmr,new_modelN4, 'g', ls='-')
+    ax.plot(modelmr,new_modelN5, 'c', ls='-')
+    ax.plot(modelmr,new_modelN6, '#53f312', ls='-')
+    ax.plot(modelmr,new_modelN7, 'r', ls='-')
+    ax.plot(modelmr,new_modelN8, '#edd010', ls='-')
+    ax.plot(modelmr,new_modelN9, '#16f6eb', ls='-')
+    ax.plot(modelmr,new_modelN10, '#ef12f3', ls='-')
+    ax.plot(modelmr,new_modelN11, '#f2f312', ls='-')
+    ax.plot(modelmr,new_modelN12, '#f36812', ls='-')
+    
+    ax.set_xlabel(r"$m_{r}$")
+    ax.set_ylabel("N")
+    ax.set_title("Comparison plot for all z-binned composite LFs:"+' '+"{:.2f}".format(0.20)+' < z < '+ "{:.2f}".format(0.80), fontsize=10)
+    
+    
+    #at.patch.set_boxstyle("round,pad=0, rounding_size=0.2")
+    #ax.add_artist(at)
+    ax.legend(prop={'size': 6})
+    ax.tick_params(axis='x',which='both',direction='in')
+    ax.minorticks_on()
+    ax.tick_params(axis='y', which='both', direction="in")
+    ax.set_xlim(16.5,22.5)
+    ax.invert_xaxis()
+    
+    
+    ax2=ax.twiny()
+    #ax2.errorbar(absR, obsLF['N'], yerr=obsLF['Nerr'], color ='#ADFF2F',fmt='v')
+    #ax2.plot(modelMr, Mrnew_modelN, color='#ADFF2F', ls='-')
+    ax2.set_xlim(-23.75, -17.5)
+    #ax2.axvline(x=Mstar, color='y', ls=':')
+    ax2.tick_params(axis='x',which='both',direction='in')
+    ax2.minorticks_on()
+    ax2.set_xlabel(r'$M_r$')
+    ax2.xaxis.label.set_color('#00CED1')   #FF1493 #00CED1 #3CB371
+    ax2.tick_params(axis='x',colors='#00CED1')
+    ax2.spines['top'].set_color('#00CED1')
+    ax2.invert_xaxis()
+    
+    plt.ylim(0.1, 50000)
+    #plt.xlim(16.5,22.5)
+    plt.semilogy()
+    #plt.gca().invert_xaxis()
+    plt.show()
+    
+    import IPython
+    IPython.embed()
+    sys.exit()
+
+            
+            
+            
+            
+            
+
+    
+            
+            
+        
+    
+    
+    
+    
+    
+    
+    
+    """Plotting"""
+    #modelmr=np.linspace(17.0,22.5,1000)
+    #y = schechterm(newparams,obsLF['mr'])
+    #phiStar = phiStar(newparams,obsLF,obsLF['mr'])
+    #phiStar=(np.sum(obsLF['N']))/(np.sum(y))
+    #new_modelN = phiStar*schechterm(newparams,modelmr)  
+    
+
+
+    
